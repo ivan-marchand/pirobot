@@ -50,9 +50,10 @@ class Server(object):
             RST = 24
             DC = 25
             BL = 23
-            self.lcd = LCD_2inch(rst=RST, dc=DC, bl=BL)
-            self.lcd.Init()
-            self.lcd.clear()
+            if self.lcd is None:
+                self.lcd = LCD_2inch(rst=RST, dc=DC, bl=BL)
+                self.lcd.Init()
+                self.lcd.clear()
             self.terminal = Terminal("Courier", self.lcd)
             self.terminal.header("PiRobot v1.0")
             self.terminal.text("Starting...")
