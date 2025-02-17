@@ -9,16 +9,20 @@ uart.flush()
 
 
 class Servo(object):
-    min_ps = 1.0 * 1_000_000
-    max_ps = 2.0 * 1_000_000
 
     def __init__(self, pin):
+        self.min_ps = 1.0 * 1_000_000
+        self.max_ps = 2.0 * 1_000_000
         self.pwm = PWM(Pin(pin))
         self.pwm.freq(50)
+
+    def configure(self, min_ps, max_ps):
+        self.min_ps = min_ps * 1_000_000
+        self.max_ps = max_ps * 1_000_000
     
     def move(self, position):
         self.pwm.freq(50)
-        duty = Servo.min_ps + (Servo.max_ps - Servo.min_ps) * position / 100
+        duty = self.min_ps + (self.max_ps - self.min_ps) * position / 100
         self.pwm.duty_ns(int(duty))
         
 
@@ -45,6 +49,10 @@ class ServoHandler(object):
         if servo > 0 and servo <= len(self.servos):
             self.servos[servo - 1].move(position)
 
+    def configure(self, servo, min_ps, max_ps):
+        if servo > 0 and servo <= len(self.servos):
+            self.servos[servo - 1].configure(min_ps, max_ps)
+
     def process_command(self, args):
         try:
             command = args[0]
@@ -56,6 +64,11 @@ class ServoHandler(object):
                 servo = int(args[1])
                 position = int(args[2])
                 self.move(servo, position)
+            elif command == "C":
+                servo = int(args[1])
+                min_ps = float(args[2])
+                max_ps = float(args[3])
+                self.configure(servo, min_ps, max_ps)
             else:
                 return False, f"[Servo] Unknonw command {command}"
         except Exception as e:
