@@ -33,10 +33,10 @@ class CameraHandler(BaseHandler):
         self.video_dir = os.path.join(os.environ["HOME"], "Videos/PiRobot")
         self.video_filename = None
         if not os.path.isdir(self.video_dir):
-            os.mkdir(self.video_dir)
+            os.makedirs(self.video_dir)
         self.picture_dir = os.path.join(os.environ["HOME"], "Pictures/PiRobot")
         if not os.path.isdir(self.picture_dir):
-            os.mkdir(self.picture_dir)
+            os.makedirs(self.picture_dir)
 
     async def process(self, message, protocol):
         if message["action"] == "set_position":

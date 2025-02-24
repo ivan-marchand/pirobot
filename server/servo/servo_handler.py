@@ -11,3 +11,7 @@ class ServoHandler:
     @staticmethod
     def stop():
         UART.write("S:S")
+
+    @staticmethod
+    def configure(servo_id, min_pulse_us, max_pulse_us):
+        UART.write(f"S:C:{servo_id}:{min_pulse_us}:{max_pulse_us}")

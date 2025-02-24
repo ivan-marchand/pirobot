@@ -182,6 +182,13 @@
       "need_setup": true,
       "category": "capability"
     },
+    "robot_has_arm": {
+      "type": "bool",
+      "default": false,
+      "export": true,
+      "need_setup": true,
+      "category": "capability"
+    },
     "camera_center_position": {
       "type": "int",
       "default": 75,

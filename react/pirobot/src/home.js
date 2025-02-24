@@ -123,6 +123,7 @@ class Home extends React.Component {
     };
 
     updateStatus = (status) => {
+        console.log(status)
         this.setState({robot_config: status.config, robot_name: status.robot_name, robot_status: status.status});
         document.title = status.robot_name
     }
@@ -194,6 +195,14 @@ class Home extends React.Component {
 
     center_camera_position = (e) => {
         this.send_action("camera", "center_position");
+    }
+
+    move_arm_to_position = (position_id) => {
+        this.send_action("arm", "move_to_position", {"position_id": position_id});
+    }
+
+    move_arm_limb = (servo, e) => {
+        this.send_action("arm", "move_servo_to_position", {"id": servo, "angle": e.target.value});
     }
 
     updateFps = (fps) => {
@@ -285,6 +294,57 @@ class Home extends React.Component {
                                         marks={[{value: this.state.robot_status.camera.center_position}]}
                                     />
                                     <IconButton onClick={this.center_camera_position}><VerticalAlignCenterIcon/></IconButton>
+                                </Stack>)}
+                                { this.state.robot_config.robot_has_arm && (<Stack
+                                    spacing={2}
+                                    justifyContent="center"
+                                    alignItems="center"
+                                    direction="row">
+                                    <Slider
+                                        min={0}
+                                        max={this.state.robot_status.arm.config.shoulder.max_angle}
+                                        step={1}
+                                        style={{height: this.state.window_height * 0.4}}
+                                        aria-label="Camera position"
+                                        orientation="vertical"
+                                        valueLabelDisplay="auto"
+                                        value={this.state.robot_status.arm.position.shoulder}
+                                        onChange={this.move_arm_limb.bind(this, "shoulder")}
+                                    />
+                                    <Slider
+                                        min={0}
+                                        max={this.state.robot_status.arm.config.forearm.max_angle}
+                                        step={1}
+                                        style={{height: this.state.window_height * 0.4}}
+                                        aria-label="Camera position"
+                                        orientation="vertical"
+                                        valueLabelDisplay="auto"
+                                        value={this.state.robot_status.arm.position.forearm}
+                                        onChange={this.move_arm_limb.bind(this, "forearm")}
+                                    />
+                                    <Slider
+                                        min={0}
+                                        max={this.state.robot_status.arm.config.wrist.max_angle}
+                                        step={1}
+                                        style={{height: this.state.window_height * 0.4}}
+                                        aria-label="Camera position"
+                                        orientation="vertical"
+                                        valueLabelDisplay="auto"
+                                        value={this.state.robot_status.arm.position.wrist}
+                                        onChange={this.move_arm_limb.bind(this, "wrist")}
+                                    />
+                                    <Slider
+                                        min={0}
+                                        max={this.state.robot_status.arm.config.claw.max_angle}
+                                        step={1}
+                                        style={{height: this.state.window_height * 0.4}}
+                                        aria-label="Camera position"
+                                        orientation="vertical"
+                                        valueLabelDisplay="auto"
+                                        value={this.state.robot_status.arm.position.claw}
+                                        onChange={this.move_arm_limb.bind(this, "claw")}
+                                    />
+                                    <IconButton onClick={this.move_arm_to_position.bind(this, "backup_camera")}><VerticalAlignCenterIcon/></IconButton>
                                 </Stack>)}
                             </Grid>
                         </Grid>

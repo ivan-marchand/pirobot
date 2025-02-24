@@ -1,3 +1,4 @@
+from arm import Arm
 from camera import Camera
 from handlers.base import BaseHandler
 # noinspection PyUnresolvedReferences
@@ -29,6 +30,7 @@ class Server(object):
         self.robot_has_speaker = Config.get("robot_has_speaker")
         self.robot_has_screen = Config.get("robot_has_screen")
         self.robot_has_light = Config.get("robot_has_light")
+        self.robot_has_arm = Config.get("robot_has_arm")
 
         self.lcd = None
         self.terminal = None
@@ -77,6 +79,11 @@ class Server(object):
         if self.robot_has_screen:
             self.terminal.text("Ready!")
 
+        if self.robot_has_arm:
+            Arm.setup()
+            if self.robot_has_screen:
+                self.terminal.text(f"Arm setup.. {Arm.status}")
+
         # Initialize handlers
         for handler in BaseHandler.handlers.values():
             handler.setup(self)
@@ -100,5 +107,7 @@ class Server(object):
                 "camera": Camera.serialize()
             }
         }
+        if self.robot_has_arm:
+            status["status"]["arm"] = Arm.serialize()
         await protocol.send_message("status", status)
 

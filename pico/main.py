@@ -17,8 +17,8 @@ class Servo(object):
         self.pwm.freq(50)
 
     def configure(self, min_ps, max_ps):
-        self.min_ps = min_ps * 1_000_000
-        self.max_ps = max_ps * 1_000_000
+        self.min_ps = min_ps * 1_000
+        self.max_ps = max_ps * 1_000
     
     def move(self, position):
         self.pwm.freq(50)
@@ -66,8 +66,8 @@ class ServoHandler(object):
                 self.move(servo, position)
             elif command == "C":
                 servo = int(args[1])
-                min_ps = float(args[2])
-                max_ps = float(args[3])
+                min_ps = int(args[2])
+                max_ps = int(args[3])
                 self.configure(servo, min_ps, max_ps)
             else:
                 return False, f"[Servo] Unknonw command {command}"

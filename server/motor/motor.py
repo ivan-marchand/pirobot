@@ -3,13 +3,11 @@ import math
 
 from handlers.base import BaseHandler
 from models import Config
-from motor.motor_dfrobot import DFRobotMotor
 from motor.motor_pico import PicoMotor
 
 logger = logging.getLogger(__name__)
 
 MOTOR_CONTROLLERS = dict(
-    dfrobot=DFRobotMotor,
     pico=PicoMotor
 )
 
