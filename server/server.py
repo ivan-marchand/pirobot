@@ -109,5 +109,7 @@ class Server(object):
         }
         if self.robot_has_arm:
             status["status"]["arm"] = Arm.serialize()
+        if self.robot_has_light:
+            status["status"]["light"] = Light.serialize()
         await protocol.send_message("status", status)
 

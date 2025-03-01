@@ -21,6 +21,8 @@ import VerticalAlignCenterIcon from '@mui/icons-material/VerticalAlignCenter';
 import RadarIcon from '@mui/icons-material/Radar';
 import GamepadIcon from '@mui/icons-material/Gamepad';
 import ControlCameraIcon from '@mui/icons-material/ControlCamera';
+import FlashlightOnIcon from '@mui/icons-material/FlashlightOn';
+import FlashlightOffIcon from '@mui/icons-material/FlashlightOff';
 import {Joystick} from "react-joystick-component";
 import { Link } from 'react-router-dom'
 
@@ -239,6 +241,9 @@ class Home extends React.Component {
                             {this.state.control === "joystick" && (<Tooltip title="Use D-pad"><IconButton onClick={this.toggleControl}><GamepadIcon/></IconButton></Tooltip>)}
                             {this.state.control === "cross"  && (<Tooltip title="Use Joystick"><IconButton onClick={this.toggleControl}><ControlCameraIcon/></IconButton></Tooltip>)}
                             <Divider orientation="vertical" flexItem/>
+                            {this.state.robot_config.robot_has_light && (<Tooltip title="Front Lights"><IconButton onClick={this.send_action.bind(this, "light", "toggle", {})}>{this.state.robot_status.light.left_on ? (<FlashlightOffIcon/>):(<FlashlightOnIcon/>)}</IconButton></Tooltip>)}
+                            {this.state.robot_config.robot_has_light && this.state.robot_config.robot_has_arm && (<Tooltip title="Arm Lights"><IconButton onClick={this.send_action.bind(this, "light", "toggle_arm_light", {})}>{this.state.robot_status.light.arm_on ? (<FlashlightOffIcon/>):(<FlashlightOnIcon/>)}</IconButton></Tooltip>)}
+                            {this.state.robot_config.robot_has_light && (<Divider orientation="vertical" flexItem/>)}
                             <Tooltip title="Face Recognition"><IconButton onClick={this.send_action.bind(this, "face_detection", "toggle", {})}>{this.face_detection ? (<FaceRetouchingOffIcon/>):(<FaceIcon/>)}</IconButton></Tooltip>
                             <Tooltip title="Start Patrolling"><IconButton onClick={this.send_action.bind(this, "drive", "patrol", {})}><RadarIcon/></IconButton></Tooltip>
                             <Tooltip title="Stop Robot"><IconButton alt="Stop Robot" onClick={this.send_action.bind(this, "drive", "stop", {})}><DangerousIcon alt="Stop Robot"/></IconButton></Tooltip>
@@ -294,57 +299,6 @@ class Home extends React.Component {
                                         marks={[{value: this.state.robot_status.camera.center_position}]}
                                     />
                                     <IconButton onClick={this.center_camera_position}><VerticalAlignCenterIcon/></IconButton>
-                                </Stack>)}
-                                { this.state.robot_config.robot_has_arm && (<Stack
-                                    spacing={2}
-                                    justifyContent="center"
-                                    alignItems="center"
-                                    direction="row">
-                                    <Slider
-                                        min={0}
-                                        max={this.state.robot_status.arm.config.shoulder.max_angle}
-                                        step={1}
-                                        style={{height: this.state.window_height * 0.4}}
-                                        aria-label="Camera position"
-                                        orientation="vertical"
-                                        valueLabelDisplay="auto"
-                                        value={this.state.robot_status.arm.position.shoulder}
-                                        onChange={this.move_arm_limb.bind(this, "shoulder")}
-                                    />
-                                    <Slider
-                                        min={0}
-                                        max={this.state.robot_status.arm.config.forearm.max_angle}
-                                        step={1}
-                                        style={{height: this.state.window_height * 0.4}}
-                                        aria-label="Camera position"
-                                        orientation="vertical"
-                                        valueLabelDisplay="auto"
-                                        value={this.state.robot_status.arm.position.forearm}
-                                        onChange={this.move_arm_limb.bind(this, "forearm")}
-                                    />
-                                    <Slider
-                                        min={0}
-                                        max={this.state.robot_status.arm.config.wrist.max_angle}
-                                        step={1}
-                                        style={{height: this.state.window_height * 0.4}}
-                                        aria-label="Camera position"
-                                        orientation="vertical"
-                                        valueLabelDisplay="auto"
-                                        value={this.state.robot_status.arm.position.wrist}
-                                        onChange={this.move_arm_limb.bind(this, "wrist")}
-                                    />
-                                    <Slider
-                                        min={0}
-                                        max={this.state.robot_status.arm.config.claw.max_angle}
-                                        step={1}
-                                        style={{height: this.state.window_height * 0.4}}
-                                        aria-label="Camera position"
-                                        orientation="vertical"
-                                        valueLabelDisplay="auto"
-                                        value={this.state.robot_status.arm.position.claw}
-                                        onChange={this.move_arm_limb.bind(this, "claw")}
-                                    />
-                                    <IconButton onClick={this.move_arm_to_position.bind(this, "backup_camera")}><VerticalAlignCenterIcon/></IconButton>
                                 </Stack>)}
                             </Grid>
                         </Grid>
