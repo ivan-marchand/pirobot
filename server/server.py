@@ -76,13 +76,13 @@ class Server(object):
         if self.robot_has_screen:
             self.terminal.text(f"Camera setup.. {Camera.status}")
 
-        if self.robot_has_screen:
-            self.terminal.text("Ready!")
-
         if self.robot_has_arm:
             Arm.setup()
             if self.robot_has_screen:
                 self.terminal.text(f"Arm setup.. {Arm.status}")
+
+        if self.robot_has_screen:
+            self.terminal.text("Ready!")
 
         # Initialize handlers
         for handler in BaseHandler.handlers.values():
