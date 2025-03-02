@@ -1,3 +1,5 @@
+import asyncio
+
 from handlers.base import BaseHandler, register_handler
 from arm import Arm
 
@@ -10,8 +12,14 @@ class DriveHandler(BaseHandler):
         self.register_for_message("arm")
 
     async def process(self, message, protocol):
+        async def move_and_send_status():
+            await Arm.move(**message["args"])
+            await self.server.send_status(protocol)
+
         if message["action"] == "move":
-            Arm.move(**message["args"])
+            asyncio.create_task(move_and_send_status())
+        elif message["action"] == "stop":
+            await Arm.stop()
             await self.server.send_status(protocol)
         elif message["action"] == "move_servo_to_position":
             Arm.move_servo_to_position(**message["args"])

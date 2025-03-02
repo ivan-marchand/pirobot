@@ -23,9 +23,11 @@ import GamepadIcon from '@mui/icons-material/Gamepad';
 import ControlCameraIcon from '@mui/icons-material/ControlCamera';
 import FlashlightOnIcon from '@mui/icons-material/FlashlightOn';
 import FlashlightOffIcon from '@mui/icons-material/FlashlightOff';
+import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturing';
 import {Joystick} from "react-joystick-component";
 import { Link } from 'react-router-dom'
 
+import ArmControl from "./ArmControl"
 import DirectionCross from "./DirectionCross"
 import VideoStreamControl from "./VideoStreamControl";
 
@@ -43,6 +45,7 @@ class Home extends React.Component {
             window_height: window.innerHeight,
             window_width: window.innerWidth,
             control: "joystick",
+            control_arm: false,
             drive_slow_mode: false,
         };
         this.selected_camera = "front"
@@ -207,6 +210,14 @@ class Home extends React.Component {
         this.send_action("arm", "move_servo_to_position", {"id": servo, "angle": e.target.value});
     }
 
+    move_arm = (servo, speed, lock_wrist) => {
+        this.send_action("arm", "move", {"id": servo, "speed": speed, "lock_wrist": lock_wrist});
+    }
+
+    stop_arm = (servo, speed, lock_wrist) => {
+        this.send_action("arm", "stop", {});
+    }
+
     updateFps = (fps) => {
         this.setState({fps: fps})
     }
@@ -218,6 +229,10 @@ class Home extends React.Component {
 
     toggleControl = () => {
         this.setState({control: this.state.control === "joystick" ? "cross" : "joystick"});
+    }
+
+    toggleArmControl = () => {
+        this.setState({control_arm: !this.state.control_arm});
     }
 
     render() {
@@ -240,6 +255,7 @@ class Home extends React.Component {
                             <Divider orientation="vertical" flexItem/>
                             {this.state.control === "joystick" && (<Tooltip title="Use D-pad"><IconButton onClick={this.toggleControl}><GamepadIcon/></IconButton></Tooltip>)}
                             {this.state.control === "cross"  && (<Tooltip title="Use Joystick"><IconButton onClick={this.toggleControl}><ControlCameraIcon/></IconButton></Tooltip>)}
+                            {this.state.robot_config.robot_has_arm  && (<Tooltip title="Toggle Arm Control"><IconButton onClick={this.toggleArmControl}><PrecisionManufacturingIcon/></IconButton></Tooltip>)}
                             <Divider orientation="vertical" flexItem/>
                             {this.state.robot_config.robot_has_light && (<Tooltip title="Front Lights"><IconButton onClick={this.send_action.bind(this, "light", "toggle", {})}>{this.state.robot_status.light.left_on ? (<FlashlightOffIcon/>):(<FlashlightOnIcon/>)}</IconButton></Tooltip>)}
                             {this.state.robot_config.robot_has_light && this.state.robot_config.robot_has_arm && (<Tooltip title="Arm Lights"><IconButton onClick={this.send_action.bind(this, "light", "toggle_arm_light", {})}>{this.state.robot_status.light.arm_on ? (<FlashlightOffIcon/>):(<FlashlightOnIcon/>)}</IconButton></Tooltip>)}
@@ -252,7 +268,7 @@ class Home extends React.Component {
                     <Grid container item xs={10} style={{margin: 0, padding: 0}}>
                         <Grid container item direction="row" justifyContent="center" alignItems="center" style={{margin: 0, padding: 0}}>
                             <Grid container item xs={2} justifyContent="center" alignItems="center">
-                                <div style={{display: this.state.control === "joystick" ? "block" : "none"}}>
+                                <div style={{display: (this.state.control === "joystick" && !this.state.control_arm) ? "block" : "none"}}>
                                     <Joystick
                                         size={this.state.window_width * 1.5 / 12.0}
                                         stickSize={this.state.window_width * 0.7 / 12.0}
@@ -264,10 +280,19 @@ class Home extends React.Component {
                                         stop={this.handleStopRobot}>
                                     </Joystick>
                                 </div>
-                                <div style={{paddingLeft: 5, display: this.state.control === "cross" ? "block" : "none"}}>
+                                <div style={{paddingLeft: 5, display: (this.state.control === "cross" && !this.state.control_arm) ? "block" : "none"}}>
                                     <DirectionCross
                                         move={this.handleMoveRobot}
                                         stop={this.handleStopRobot}
+                                    />
+                                </div>
+                                <div style={{paddingLeft: 5, display: this.state.control_arm ? "block" : "none"}}>
+                                    <ArmControl
+                                        move={this.move_arm}
+                                        stop={this.stop_arm}
+                                        move_limb={this.move_arm_limb}
+                                        enabled={this.state.robot_config.robot_has_arm}
+                                        status={this.state.robot_status.arm}
                                     />
                                 </div>
                             </Grid>

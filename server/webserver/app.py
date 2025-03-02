@@ -1,3 +1,5 @@
+import asyncio
+
 import cv2
 import io
 import logging

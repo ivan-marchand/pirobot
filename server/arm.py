@@ -1,7 +1,7 @@
+import asyncio
 import copy
 import math
 import time
-
 from servo.servo_handler import ServoHandler
 
 CLAW = "claw"
@@ -113,6 +113,7 @@ class Arm(object):
         SHOULDER: 0,
     }
     timeout = 5 # seconds
+    moving = asyncio.Event()
 
     @staticmethod
     def setup():
@@ -148,16 +149,27 @@ class Arm(object):
         return list(PRESET_POSITIONS.keys())
 
     @staticmethod
-    def move(id, speed, lock_wrist=False):
-        success = True
-        start_ts = time.time()
+    async def stop():
+        Arm.moving.clear()
+
+    @staticmethod
+    async def move(id, speed, lock_wrist=False):
         servo_config = SERVOS_CONFIG.get(id)
         if servo_config is None:
             return False, f"Unknown servo ID: {id}"
 
-        while success and (time.time() - start_ts) < Arm.timeout:
+        start_ts = time.time()
+        Arm.moving.set()
+        success = True
+        while success and Arm.moving.is_set() and (time.time() - start_ts) < Arm.timeout:
             angle = Arm.position[id]
-            success, _ = Arm.move_servo_to_position(id, angle + 1, wait=True, lock_wrist=lock_wrist)
+            if speed > 0:
+                new_angle = angle + 0.1
+            else:
+                new_angle = angle - 0.1
+            success, _ = Arm.move_servo_to_position(id, new_angle, wait=False, lock_wrist=lock_wrist)
+            await asyncio.sleep(0.1 * (100 - abs(speed)) / 100.0)
+        Arm.moving.clear()
 
     @staticmethod
     def move_servo_to_position(id, angle, wait=True, lock_wrist=False):

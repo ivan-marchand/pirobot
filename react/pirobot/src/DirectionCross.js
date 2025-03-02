@@ -14,25 +14,20 @@ import React from 'react';
 
 
 class DirectionCross extends React.Component {
-    send_json = (json_data) => {
-        this.state.ws.send(
-            JSON.stringify(json_data)
-        );
-    }
 
- button = (props) => {
-    return (
-        <IconButton
-         onMouseUp={this.props.stop}
-         onTouchEnd={this.props.stop}
-         onMouseDown={this.props.move.bind(null, props.left_speed, props.right_speed)}
-         onTouchStart={this.props.move.bind(null, props.left_speed, props.right_speed)}
-         style={{"background-color": "grey"}}
-         >
-            {props.children}
-         </IconButton>
-    )
-}
+    button = (props) => {
+        return (
+            <IconButton
+             onMouseUp={this.props.stop}
+             onTouchEnd={this.props.stop}
+             onMouseDown={this.props.move.bind(null, props.left_speed, props.right_speed)}
+             onTouchStart={this.props.move.bind(null, props.left_speed, props.right_speed)}
+             style={{"background-color": "grey"}}
+             >
+                {props.children}
+             </IconButton>
+        )
+    }
 
     render() {
         return (
