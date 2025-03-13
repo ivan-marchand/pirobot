@@ -214,7 +214,7 @@ class Home extends React.Component {
         this.send_action("arm", "move", {"id": servo, "speed": speed, "lock_wrist": lock_wrist});
     }
 
-    stop_arm = (servo, speed, lock_wrist) => {
+    stop_arm = () => {
         this.send_action("arm", "stop", {});
     }
 

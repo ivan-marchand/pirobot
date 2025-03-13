@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 class MessageOriginator(Enum):
     motor = "M"
     battery = "B"
+    servo = "S"
 
 
 class MessageType(Enum):

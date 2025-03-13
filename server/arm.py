@@ -1,8 +1,8 @@
-import asyncio
 import copy
 import math
 import time
 from servo.servo_handler import ServoHandler
+from uart import UART, MessageOriginator, MessageType
 
 CLAW = "claw"
 WRIST = "wrist"
@@ -15,28 +15,32 @@ SERVOS_CONFIG = {
         "min_pulse_us": 1000,
         "max_pulse_us": 2000,
         "max_angle": 180,
-        "speed": 0.11 # Sec / 60 deg
+        "speed": 0.11, # Sec / 60 deg
+        "max_speed": 100,  # Percent / sec
     },
     WRIST: {
         "id": 4,
         "min_pulse_us": 500,
         "max_pulse_us": 2500,
         "max_angle": 180,
-        "speed": 0.15 # Sec / 60 deg
+        "speed": 0.15, # Sec / 60 deg
+        "max_speed": 100,  # Percent / sec
     },
     FOREARM: {
         "id": 3,
         "min_pulse_us": 500,
         "max_pulse_us": 2500,
         "max_angle": 180,
-        "speed": 0.15 # Sec / 60 deg
+        "speed": 0.15, # Sec / 60 deg
+        "max_speed": 100,  # Percent / sec
     },
     SHOULDER: {
         "id": 2,
         "min_pulse_us": 500,
         "max_pulse_us": 2500,
         "max_angle": 270,
-        "speed": 0.11 # Sec / 60 deg
+        "speed": 0.11, # Sec / 60 deg
+        "max_speed": 100,  # Percent / sec
     },
 }
 
@@ -112,16 +116,44 @@ class Arm(object):
         FOREARM: 0,
         SHOULDER: 0,
     }
-    timeout = 5 # seconds
-    moving = asyncio.Event()
 
     @staticmethod
     def setup():
         for servo_config in SERVOS_CONFIG.values():
-            ServoHandler.configure(servo_config["id"], servo_config["min_pulse_us"], servo_config["max_pulse_us"])
+            ServoHandler.configure(
+                servo_id=servo_config["id"],
+                min_pulse_us=servo_config["min_pulse_us"],
+                max_pulse_us=servo_config["max_pulse_us"],
+                max_speed=servo_config["max_speed"],
+            )
         Arm.move_to_position("backup_camera")
         Arm.move_servo_to_position(CLAW, SERVOS_CONFIG[CLAW]['max_angle'])
         Arm.status = "OK"
+        UART.register_consumer("arm_controller", Arm, MessageOriginator.servo, MessageType.status)
+
+    @staticmethod
+    def receive_uart_message(message, originator, message_type):
+        servo_id_to_limb = {s["id"]: limb for limb, s in SERVOS_CONFIG.items()}
+        servo_nb = 0
+        while len(message) > servo_nb * 3:
+            offset = servo_nb * 3
+            servo_id = int(message[offset])
+            is_initialized = message[offset + 1].lower() == "y"
+            position = message[offset + 2]
+            position = float(position) if position != 'null' else None
+            servo_nb += 1
+            if servo_id in servo_id_to_limb:
+                limb = servo_id_to_limb[servo_id]
+                servo_config = SERVOS_CONFIG[limb]
+                if position is not None:
+                    Arm.position[limb] = position * servo_config["max_angle"] / 100.0
+                if not is_initialized:
+                    ServoHandler.configure(
+                        servo_id=servo_config["id"],
+                        min_pulse_us=servo_config["min_pulse_us"],
+                        max_pulse_us=servo_config["max_pulse_us"],
+                        max_speed=servo_config["max_speed"],
+                    )
 
     @staticmethod
     def _in_exclusion_zone(id, angle, position=None):
@@ -132,13 +164,27 @@ class Arm(object):
                 if angle < exclusion_zone.get(id)[0] or angle > exclusion_zone.get(id)[1]:
                     continue
                 else:
+                    all_match = True
                     for other_id in [i for i in exclusion_zone.keys() if i != id]:
-                        all_match = True
                         if position[other_id] < exclusion_zone[other_id][0] or position[other_id] > exclusion_zone[other_id][1]:
                             all_match = False
                     if all_match:
                         return True
         return False
+
+    @staticmethod
+    def _get_servo_range(id):
+        servo_config = SERVOS_CONFIG.get(id)
+        position = Arm.position
+        for exclusion_zone in EXCLUSION_ZONES:
+            if id in exclusion_zone:
+                all_match = True
+                for other_id in [i for i in exclusion_zone.keys() if i != id]:
+                    if position[other_id] < exclusion_zone[other_id][0] or position[other_id] > exclusion_zone[other_id][1]:
+                        all_match = False
+                if all_match:
+                    return exclusion_zone[id]
+        return [0, servo_config["max_angle"]]
 
     @staticmethod
     def get_ids():
@@ -149,27 +195,19 @@ class Arm(object):
         return list(PRESET_POSITIONS.keys())
 
     @staticmethod
-    async def stop():
-        Arm.moving.clear()
+    def stop():
+        for servo_config in SERVOS_CONFIG.values():
+            ServoHandler.stop_servo(servo_config.get("id"))
 
     @staticmethod
-    async def move(id, speed, lock_wrist=False):
+    def move(id, speed, lock_wrist=False):
         servo_config = SERVOS_CONFIG.get(id)
         if servo_config is None:
             return False, f"Unknown servo ID: {id}"
 
-        start_ts = time.time()
-        Arm.moving.set()
-        success = True
-        while success and Arm.moving.is_set() and (time.time() - start_ts) < Arm.timeout:
-            angle = Arm.position[id]
-            if speed > 0:
-                new_angle = angle + 0.1
-            else:
-                new_angle = angle - 0.1
-            success, _ = Arm.move_servo_to_position(id, new_angle, wait=False, lock_wrist=lock_wrist)
-            await asyncio.sleep(0.1 * (100 - abs(speed)) / 100.0)
-        Arm.moving.clear()
+        servo_range = Arm._get_servo_range(id)
+        target_position = servo_range[1] if speed > 0 else servo_range[0]
+        ServoHandler.move(servo_config.get("id"), target_position, abs(speed))
 
     @staticmethod
     def move_servo_to_position(id, angle, wait=True, lock_wrist=False):
