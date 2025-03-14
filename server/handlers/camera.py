@@ -67,6 +67,11 @@ class CameraHandler(BaseHandler):
             self.picture_destination = message["args"].get("destination", "file")
         elif message["action"] == "toggle_overlay":
             Camera.overlay = not Camera.overlay
+        elif message["action"] == "toggle_camera":
+            if Camera.selected_camera == "front":
+                Camera.selected_camera = "back"
+            else:
+                Camera.selected_camera = "front"
         elif message["action"] == "select_camera":
             selected_camera = message["args"].get("camera")
             if selected_camera in ["front", "back"]:
