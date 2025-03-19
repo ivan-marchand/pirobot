@@ -1,8 +1,11 @@
 import copy
+import logging
 import math
 import time
 from servo.servo_handler import ServoHandler
 from uart import UART, MessageOriginator, MessageType
+
+logger = logging.getLogger(__name__)
 
 CLAW = "claw"
 WRIST = "wrist"
@@ -126,6 +129,7 @@ class Arm(object):
                 max_pulse_us=servo_config["max_pulse_us"],
                 max_speed=servo_config["max_speed"],
             )
+        Arm.move_to_position("zero")
         Arm.move_to_position("backup_camera")
         Arm.move_servo_to_position(CLAW, SERVOS_CONFIG[CLAW]['max_angle'])
         Arm.status = "OK"
@@ -183,7 +187,12 @@ class Arm(object):
                     if position[other_id] < exclusion_zone[other_id][0] or position[other_id] > exclusion_zone[other_id][1]:
                         all_match = False
                 if all_match:
-                    return exclusion_zone[id]
+                    if position[id] < exclusion_zone[0]:
+                        return [0, exclusion_zone[0]]
+                    elif position[id] > exclusion_zone[1]:
+                        return [exclusion_zone[1], servo_config["max_angle"]]
+                    # In exclusion zone, no move possible
+                    return None
         return [0, servo_config["max_angle"]]
 
     @staticmethod
@@ -206,28 +215,38 @@ class Arm(object):
             return False, f"Unknown servo ID: {id}"
 
         servo_range = Arm._get_servo_range(id)
-        target_position = servo_range[1] if speed > 0 else servo_range[0]
-        ServoHandler.move(servo_config.get("id"), target_position, abs(speed))
+        if servo_range is not None:
+            target_position = servo_range[1] if speed > 0 else servo_range[0]
+            ServoHandler.move(servo_config.get("id"), target_position, abs(speed))
+            return True, "Success"
+        else:
+            message = "{id} is in exclusion zone, no move possible"
+            logger.warning(message)
+            return False, message
 
     @staticmethod
     def move_servo_to_position(id, angle, wait=True, lock_wrist=False):
-        print(dict(id=id, angle=angle, wait=wait, lock_wrist=lock_wrist))
+        logger.info(f"Moving servo {dict(id=id, angle=angle, wait=wait, lock_wrist=lock_wrist)}")
         servo_config = SERVOS_CONFIG.get(id)
         if servo_config is None:
             return False, f"Unknown servo ID: {id}"
 
         max_angle = servo_config.get("max_angle")
         if angle < 0 or angle > max_angle:
-            return False, f"Invalid angle: {angle}"
+            message = f"Invalid angle: {angle} for {id}"
+            logger.warning(message)
+            return False, message
 
         if Arm._in_exclusion_zone(id, angle):
-            return False, "Moving to an exclusion zone"
+            message = f"Moving to an exclusion zone for {id}"
+            logger.warning(message)
+            return False, message
 
         if id == FOREARM and lock_wrist:
             forearm_angle = Arm.position[FOREARM]
             wrist_angle = Arm.position[WRIST]
             step = int(math.copysign(1, angle - forearm_angle))
-            for i in range(abs(angle - forearm_angle)):
+            for i in range(int(abs(angle - forearm_angle))):
                 Arm.move_servo_to_position(id=FOREARM, angle=forearm_angle + (i + 1) * step, wait=wait, lock_wrist=False)
                 Arm.move_servo_to_position(id=WRIST, angle=wrist_angle - (i + 1) * step, wait=wait, lock_wrist=False)
         else:
@@ -243,7 +262,9 @@ class Arm(object):
     def move_to_position(position_id, lock_wrist=False):
         position = PRESET_POSITIONS.get(position_id)
         if position is None:
-            return False, f"Unknown position ID: {position_id}"
+            message = f"Unknown position ID: {position_id}"
+            logger.warning(message)
+            return False, message
 
         # Lock wrist?
         move_by_id = {move.get('id'): move.get('angle') for move in position.get('moves')}
@@ -272,12 +293,15 @@ class Arm(object):
                     moves.append(move)
             # No new moves found?
             if len(sorted_moves) == nb_of_moves:
-                return False, "Moving to an exclusion zone"
+                message = "Moving to an exclusion zone"
+                logger.warning(message)
+                return False, message
             nb_of_moves = len(sorted_moves)
 
         for move in sorted_moves:
             success, message = Arm.move_servo_to_position(id=move.get("id"), angle=move.get("angle"), lock_wrist=move.get('lock_wrist', False))
             if not success:
+                logger.warning(message)
                 return False, message
 
         return  True, "Success"
