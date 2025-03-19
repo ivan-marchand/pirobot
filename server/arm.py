@@ -211,7 +211,10 @@ class Arm(object):
 
     @staticmethod
     def stop_servo(id):
-        ServoHandler.stop_servo(id)
+        servo_config = SERVOS_CONFIG.get(id)
+        if servo_config is None:
+            return False, f"Unknown servo ID: {id}"
+        ServoHandler.stop_servo(servo_config.get("id"))
 
     @staticmethod
     def move(id, speed, lock_wrist=False):
