@@ -130,10 +130,13 @@ class Arm(object):
                 max_speed=servo_config["max_speed"],
             )
         Arm.move_to_position("zero")
+        # Wait for servo to move
+        time.sleep(2)
         Arm.move_to_position("backup_camera")
         Arm.move_servo_to_position(CLAW, SERVOS_CONFIG[CLAW]['max_angle'])
         Arm.status = "OK"
         UART.register_consumer("arm_controller", Arm, MessageOriginator.servo, MessageType.status)
+        logger.info("Successfully initialized servo controller")
 
     @staticmethod
     def receive_uart_message(message, originator, message_type):
@@ -152,6 +155,7 @@ class Arm(object):
                 if position is not None:
                     Arm.position[limb] = position * servo_config["max_angle"] / 100.0
                 if not is_initialized:
+                    logger.info("Successfully re-initialized servo controller")
                     ServoHandler.configure(
                         servo_id=servo_config["id"],
                         min_pulse_us=servo_config["min_pulse_us"],
@@ -186,11 +190,11 @@ class Arm(object):
                 for other_id in [i for i in exclusion_zone.keys() if i != id]:
                     if position[other_id] < exclusion_zone[other_id][0] or position[other_id] > exclusion_zone[other_id][1]:
                         all_match = False
-                if all_match:
-                    if position[id] < exclusion_zone[0]:
-                        return [0, exclusion_zone[0]]
-                    elif position[id] > exclusion_zone[1]:
-                        return [exclusion_zone[1], servo_config["max_angle"]]
+                if all_match and False:
+                    if position[id] < exclusion_zone[id][0]:
+                        return [0, exclusion_zone[id][0]]
+                    elif position[id] > exclusion_zone[id][1]:
+                        return [exclusion_zone[id][1], servo_config["max_angle"]]
                     # In exclusion zone, no move possible
                     return None
         return [0, servo_config["max_angle"]]

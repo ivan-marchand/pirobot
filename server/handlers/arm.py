@@ -15,6 +15,9 @@ class DriveHandler(BaseHandler):
         if message["action"] == "move":
             Arm.move(**message["args"])
             await self.server.send_status(protocol)
+        elif message["action"] == "stop_servo":
+            Arm.stop_servo(**message["args"])
+            await self.server.send_status(protocol)
         elif message["action"] == "stop":
             Arm.stop()
             await self.server.send_status(protocol)
