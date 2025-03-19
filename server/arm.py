@@ -129,9 +129,6 @@ class Arm(object):
                 max_pulse_us=servo_config["max_pulse_us"],
                 max_speed=servo_config["max_speed"],
             )
-        Arm.move_to_position("zero")
-        # Wait for servo to move
-        time.sleep(2)
         Arm.move_to_position("backup_camera")
         Arm.move_servo_to_position(CLAW, SERVOS_CONFIG[CLAW]['max_angle'])
         Arm.status = "OK"
@@ -211,6 +208,10 @@ class Arm(object):
     def stop():
         for servo_config in SERVOS_CONFIG.values():
             ServoHandler.stop_servo(servo_config.get("id"))
+
+    @staticmethod
+    def stop_servo(id):
+        ServoHandler.stop_servo(id)
 
     @staticmethod
     def move(id, speed, lock_wrist=False):
