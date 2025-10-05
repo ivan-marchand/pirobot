@@ -1,6 +1,7 @@
 from handlers.base import BaseHandler, register_handler
 from game import Games
 from models import Config
+from sfx import SFX
 
 
 @register_handler("talk")
@@ -20,11 +21,13 @@ class TalkHandler(BaseHandler):
             if len(cmd) > 1:
                 command = cmd[0]
                 args = cmd[1:]
-                if command == "img" and self.server.robot_has_screen:
+                if command == "img" and args and self.server.robot_has_screen:
                     lcd_handler = BaseHandler.get_handler("lcd")
                     if lcd_handler is not None:
                         lcd_handler.set_lcd_picture(args[0])
                     message = None
+                elif command == "sfx" and args and self.server.robot_has_speaker:
+                    message = SFX.play(args[0])
                 elif command == "play":
                     message = Games.play(args[0], args[1:])
                 else:
