@@ -54,15 +54,15 @@ DEFAULT_EXCLUSION_ZONES = [
     },
     {
         FOREARM: [145, 180],
-        SHOULDER: [0, 41]
+        SHOULDER: [0, 34]
     },
     {
         FOREARM: [145, 180],
-        SHOULDER: [43, 180]
+        SHOULDER: [36, 180]
     },
     {
         FOREARM: [171, 180],
-        SHOULDER: [42, 42]
+        SHOULDER: [35, 35]
     },
 ]
 #EXCLUSION_ZONES = Config.get("exclusion_zones", DEFAULT_EXCLUSION_ZONES)
@@ -74,7 +74,7 @@ PRESET_POSITIONS = {
         "moves": [
             {"id": FOREARM, "angle": 60},
             {"id": WRIST, "angle": 60},
-            {"id": SHOULDER, "angle": 42},
+            {"id": SHOULDER, "angle": 35},
         ]
     },
     "backup_camera": {
@@ -82,13 +82,13 @@ PRESET_POSITIONS = {
         "moves": [
             {"id": FOREARM, "angle": 30},
             {"id": WRIST, "angle": 165},
-            {"id": SHOULDER, "angle": 42},
+            {"id": SHOULDER, "angle": 35},
         ]
     },
     "pickup": {
         "name": "Pickup From Floor",
         "moves": [
-            {"id": SHOULDER, "angle": 42},
+            {"id": SHOULDER, "angle": 35},
             {"id": WRIST, "angle": 25},
             {"id": FOREARM, "angle": 170},
         ]
@@ -96,7 +96,7 @@ PRESET_POSITIONS = {
     "grab": {
         "name": "Grab From Floor",
         "moves": [
-            {"id": SHOULDER, "angle": 42},
+            {"id": SHOULDER, "angle": 35},
             {"id": WRIST, "angle": 170},
             {"id": FOREARM, "angle": 110},
         ]
