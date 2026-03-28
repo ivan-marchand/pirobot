@@ -243,26 +243,25 @@ class Camera(object):
         back_resolution = Config.get('back_capturing_resolution')
         back_angle = Config.get('back_capturing_angle')
 
-        Camera.front_capture_device = CaptureDevice(
-            resolution=front_resolution,
-            capturing_device=front_capturing_device,
-            angle=front_angle
-        )
-        if Config.get("robot_has_back_camera") and back_capturing_device not in [None, "none"]:
-            if platform.machine() in ["aarch", "aarch64"]:
-                Camera.back_capture_device = CaptureDevice(
-                    resolution=back_resolution,
-                    capturing_device=back_capturing_device,
-                    angle=back_angle
-                )
-            else:
-                Camera.back_capture_device = Camera.front_capture_device
-        else:
-            Camera.back_capture_device = None
-
         Camera.capturing = True
         frame_delay = 1.0 / Camera.frame_rate
         try:
+            Camera.front_capture_device = CaptureDevice(
+                resolution=front_resolution,
+                capturing_device=front_capturing_device,
+                angle=front_angle
+            )
+            if Config.get("robot_has_back_camera") and back_capturing_device not in [None, "none"]:
+                if platform.machine() in ["aarch", "aarch64"]:
+                    Camera.back_capture_device = CaptureDevice(
+                        resolution=back_resolution,
+                        capturing_device=back_capturing_device,
+                        angle=back_angle
+                    )
+                else:
+                    Camera.back_capture_device = Camera.front_capture_device
+            else:
+                Camera.back_capture_device = None
             while Camera.capturing:
                 try:
                     await asyncio.to_thread(Camera.front_capture_device.grab)
@@ -313,13 +312,11 @@ class Camera(object):
                                     callback(jpeg_bytes)
                                 except Exception:
                                     logger.error("Exception in streaming frame callback", exc_info=True)
-
-                    await asyncio.sleep(frame_delay)
                 except asyncio.CancelledError:
                     raise
                 except Exception:
                     logger.error("Unexpected exception in continuous capture", exc_info=True)
-                    continue
+                await asyncio.sleep(frame_delay)
         finally:
             if Camera.front_capture_device is not None:
                 await asyncio.to_thread(Camera.front_capture_device.close)
@@ -335,7 +332,7 @@ class Camera(object):
         if not Camera.capturing or Camera.capturing_task is None or Camera.capturing_task.done():
             Camera.capturing = True
             logger.info("Start capture")
-            Camera.capturing_task = asyncio.get_event_loop().create_task(Camera.capture_continuous())
+            Camera.capturing_task = asyncio.get_running_loop().create_task(Camera.capture_continuous())
 
     @staticmethod
     def start_streaming():
