@@ -11,15 +11,17 @@ from camera import Camera
 
 class TestCameraAsyncCapture(unittest.IsolatedAsyncioTestCase):
 
+    def setUp(self):
+        """Reset Camera state between tests."""
+        Camera.capturing = False
+        Camera.capturing_task = None
+
     def test_capture_continuous_is_coroutine(self):
         """capture_continuous must be an async def, not a sync function."""
         self.assertTrue(inspect.iscoroutinefunction(Camera.capture_continuous))
 
     async def test_start_continuous_capture_creates_asyncio_task(self):
         """start_continuous_capture must create an asyncio.Task, not a threading.Thread."""
-        Camera.capturing = False
-        Camera.capturing_task = None
-
         async def _mock_capture():
             await asyncio.sleep(100)
 
@@ -35,16 +37,14 @@ class TestCameraAsyncCapture(unittest.IsolatedAsyncioTestCase):
 
     async def test_start_continuous_capture_skips_if_already_running(self):
         """start_continuous_capture must not create a second task if one is running."""
-        Camera.capturing = False
-        Camera.capturing_task = None
-
         async def _mock_capture():
             await asyncio.sleep(100)
 
         with patch.object(Camera, 'capture_continuous', _mock_capture):
             Camera.start_continuous_capture()
             first_task = Camera.capturing_task
-            Camera.start_continuous_capture()  # second call
+            await asyncio.sleep(0)  # let task start before second call
+            Camera.start_continuous_capture()  # second call — must not create new task
             self.assertIs(Camera.capturing_task, first_task)
             first_task.cancel()
             try:
@@ -54,27 +54,23 @@ class TestCameraAsyncCapture(unittest.IsolatedAsyncioTestCase):
 
     async def test_capturing_stops_when_flag_cleared(self):
         """Setting Camera.capturing = False causes the capture loop to exit."""
-        Camera.capturing = False
-        Camera.capturing_task = None
-
         async def _mock_capture():
             while Camera.capturing:
                 await asyncio.sleep(0.005)
 
         with patch.object(Camera, 'capture_continuous', _mock_capture):
+            Camera.capturing = True
             Camera.start_continuous_capture()
             self.assertFalse(Camera.capturing_task.done())
             Camera.capturing = False
-            await asyncio.sleep(0.02)
+            await asyncio.wait_for(Camera.capturing_task, timeout=1.0)
             self.assertTrue(Camera.capturing_task.done())
 
     def test_no_threading_lock_on_class(self):
-        """streaming_frame_callbacks (the old Lock) must not exist on Camera."""
-        import threading
-        # After refactor, Camera has no threading.Lock class variable
+        """streaming_frame_callbacks (the old Lock) must not exist on Camera after refactor."""
         self.assertFalse(
-            isinstance(getattr(Camera, 'streaming_frame_callbacks', None), threading.Lock),
-            "Camera.streaming_frame_callbacks should not be a threading.Lock after refactor",
+            hasattr(Camera, 'streaming_frame_callbacks'),
+            "Camera.streaming_frame_callbacks must be removed entirely after refactor",
         )
 
     def test_add_remove_callback_without_lock(self):
