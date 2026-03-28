@@ -57,6 +57,8 @@ class Config(Base):
 
     @staticmethod
     def setup(robot_config):
+        if not os.path.isdir(Config.USER_CONFIG_DIR):
+            os.makedirs(Config.USER_CONFIG_DIR)
 
         Config.user_config = configparser.ConfigParser(defaults=DEFAULT_CONFIG, default_section="pirobot", allow_no_value=True)
         Config.user_config.read(["/etc/pirobot/pirobot.config", os.path.join(Config.USER_CONFIG_DIR, "pirobot.config")])
@@ -155,9 +157,9 @@ class Config(Base):
             session = Config.get_session()
             c = Config.get_from_db(session, key)
             if c is not None:
-                c.value = value
+                c.value = str(value)
             else:
-                c = Config(key=key, value=value)
+                c = Config(key=key, value=str(value))
 
             session.add(c)
             session.commit()
@@ -218,12 +220,13 @@ class Config(Base):
         return config
 
     @staticmethod
-    def process(message, protocol):
+    async def process(message, protocol):
         success = False
-        need_setup = []
+        need_setup = False
         if message["action"] == "get":
             success = True
-            protocol.send_message(
+            await protocol.send_message(
+                "configuration",
                 {
                     "type": "configuration",
                     "action": "get",
@@ -234,7 +237,8 @@ class Config(Base):
         elif message["action"] == "update":
             success = Config.save(message["args"]["key"], message["args"]["value"])
             need_setup = Config.need_setup(message["args"]["key"])
-            protocol.send_message(
+            await protocol.send_message(
+                "configuration",
                 {
                     "type": "configuration",
                     "action": "update",
@@ -245,7 +249,8 @@ class Config(Base):
         elif message["action"] == "delete":
             success = Config.delete(message["args"]["key"])
             need_setup = Config.need_setup(message["args"]["key"])
-            protocol.send_message(
+            await protocol.send_message(
+                "configuration",
                 {
                     "type": "configuration",
                     "action": "delete",

@@ -1,0 +1,23 @@
+[project]
+name = "pirobot"
+version = "0.1.0"
+requires-python = ">=3.9"
+dependencies = [
+    "aiohttp",
+    "aiortc",
+    "opencv-python-headless",
+    "smbus; sys_platform == 'linux'",
+    "pyserial",
+    "pyttsx3",
+    "pillow",
+    "pygame",
+    "sqlalchemy",
+    "prettytable",
+    "pyinstaller",
+    "fake-rpi; platform_machine != 'aarch64'",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+]

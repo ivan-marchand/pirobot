@@ -52,6 +52,11 @@
       "default": false,
       "category": "debug"
     },
+    "auto_uart_reconnect": {
+      "type": "bool",
+      "default": true,
+      "category": "debug"
+    },
     "lense_coeff_x_pos": {
       "type": "float",
       "default": 0.8,
@@ -70,6 +75,7 @@
     "front_capturing_resolution": {
       "type": "str",
       "default": "1280x720",
+      "need_setup": true,
       "category": "camera"
     },
     "front_capturing_angle": {
@@ -90,6 +96,7 @@
     "back_capturing_resolution": {
       "type": "str",
       "default": "640x480",
+      "need_setup": true,
       "category": "camera"
     },
     "back_capturing_angle": {
@@ -99,13 +106,24 @@
     },
     "capturing_framerate": {
       "type": "int",
-      "default": 20,
+      "default": 10,
       "need_setup": true,
       "category": "camera"
     },
     "video_codec": {
       "type": "str",
-      "default": "XVID",
+      "default": "mp4v",
+      "category": "camera"
+    },
+    "video_format": {
+      "type": "str",
+      "default": "mp4",
+      "category": "camera"
+    },
+    "webrtc_h264_encoder": {
+      "type": "str",
+      "default": "auto",
+      "choices": ["auto", "h264_v4l2m2m", "libx264"],
       "category": "camera"
     },
     "robot_has_light": {
@@ -166,6 +184,13 @@
       "category": "capability"
     },
     "robot_has_camera_servo": {
+      "type": "bool",
+      "default": false,
+      "export": true,
+      "need_setup": true,
+      "category": "capability"
+    },
+    "robot_has_arm": {
       "type": "bool",
       "default": false,
       "export": true,

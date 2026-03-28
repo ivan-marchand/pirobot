@@ -42,12 +42,13 @@ class RaspberryPi:
                  dc=25,
                  bl=23,
                  bl_freq=1000):
-        self.np=np
-        self.RST_PIN= rst
+        self._pwm = None
+        self.np = np
+        self.RST_PIN = rst
         self.DC_PIN = dc
         self.BL_PIN = bl
-        self.SPEED  =spi_freq
-        self.BL_freq=bl_freq
+        self.SPEED = spi_freq
+        self.BL_freq = bl_freq
         self.GPIO = RPi.GPIO
         self.GPIO.setmode(self.GPIO.BCM)
         self.GPIO.setwarnings(False)

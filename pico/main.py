@@ -9,18 +9,69 @@ uart.flush()
 
 
 class Servo(object):
-    min_ps = 1.0 * 1_000_000
-    max_ps = 2.0 * 1_000_000
+    REFRESH_INTERVAL = 10  # ms
 
     def __init__(self, pin):
+        self.initialized = False
+        self.min_ps = 1.0 * 1_000_000
+        self.max_ps = 2.0 * 1_000_000
         self.pwm = PWM(Pin(pin))
         self.pwm.freq(50)
+        self.max_speed = 50 # Percent / second
+        self.position = None
+        self.speed = 0
+        self.previous_ts = None
+        self.target_position = None
+
+    def configure(self, min_ps, max_ps, max_speed):
+        self.initialized = True
+        self.min_ps = min_ps * 1_000
+        self.max_ps = max_ps * 1_000
+        if max_speed is not None:
+            self.max_speed = max_speed
     
-    def move(self, position):
+    def stop(self):
+        self.speed = 0
+        self.previous_ts = None
+        self.target_position = None
+
+    def move(self, position, speed):
+        if speed is None:
+            self.stop()
+            self._move(position)
+        elif self.position is not None:
+            self.previous_ts = utime.ticks_ms()
+            self.speed = speed
+            self.target_position = position
+            
+
+    def iterate(self):
+        if self.speed != 0:
+            now = utime.ticks_ms()
+            interval = (now - self.previous_ts)
+            if interval >= Servo.REFRESH_INTERVAL:
+                servo_speed = self.speed / 100.0 * self.max_speed
+                position_delta = servo_speed * interval / 1000.0
+                if self.target_position > self.position:
+                    new_position = self.position + position_delta
+                    if new_position >= self.target_position:
+                        new_position = self.target_position
+                        self.stop()
+                else:
+                    new_position = self.position - position_delta
+                    if new_position <= self.target_position:
+                        new_position = self.target_position
+                        self.stop()
+                self.previous_ts = now
+                self._move(new_position)
+            
+
+    def _move(self, position):
+        self.position = max(0, min(100, position))
         self.pwm.freq(50)
-        duty = Servo.min_ps + (Servo.max_ps - Servo.min_ps) * position / 100
+        duty = self.min_ps + (self.max_ps - self.min_ps) * self.position / 100
         self.pwm.duty_ns(int(duty))
-        
+
 
 class ServoHandler(object):
 
@@ -40,10 +91,22 @@ class ServoHandler(object):
     def start(self):
         self.started = True
         self.enable.high()
-        
-    def move(self, servo, position):
+
+    def stop_servo(self, servo):
         if servo > 0 and servo <= len(self.servos):
-            self.servos[servo - 1].move(position)
+            self.servos[servo - 1].stop()
+
+    def move(self, servo, position, speed):
+        if servo > 0 and servo <= len(self.servos):
+            self.servos[servo - 1].move(position, speed)
+
+    def configure(self, servo, min_ps, max_ps, max_speed):
+        if servo > 0 and servo <= len(self.servos):
+            self.servos[servo - 1].configure(min_ps, max_ps, max_speed)
+
+    def iterate(self):
+        for servo in self.servos:
+            servo.iterate()
 
     def process_command(self, args):
         try:
@@ -54,14 +117,38 @@ class ServoHandler(object):
                 if not self.started:
                     self.start()
                 servo = int(args[1])
-                position = int(args[2])
-                self.move(servo, position)
+                position = float(args[2])
+                if len(args) >= 4:
+                    speed = float(args[3])
+                else:
+                    speed = None
+                self.move(servo, position, speed)
+            elif command == "SS":
+                if not self.started:
+                    self.start()
+                servo = int(args[1])
+                self.stop_servo(servo)
+            elif command == "C":
+                servo = int(args[1])
+                min_ps = int(args[2])
+                max_ps = int(args[3])
+                if len(args) >= 5:
+                    max_speed = float(args[4])
+                else:
+                    max_speed = None
+                self.configure(servo, min_ps, max_ps, max_speed)
             else:
                 return False, f"[Servo] Unknonw command {command}"
         except Exception as e:
             print(e)
             return False, f"[Servo] Unable to decode arguments {args}"
         return True, "OK"
+
+    def get_status(self):
+        status = "S:S"
+        for i, servo in enumerate(self.servos):
+            status += f":{i+1}:{'Y' if servo.initialized else 'N'}:{servo.position if servo.position is not None else 'null'}"
+        return status
 
 
 class BatteryHandler(object):
@@ -713,6 +800,7 @@ patroller_handler = PatrollerHandler(motor_handler, ultrasonic_handler)
 status_handler = StatusHandler()
 status_handler.add_handler(motor_handler, 200)
 status_handler.add_handler(battery_handler, 10000)
+status_handler.add_handler(servo_handler, 500)
 
 
 def process_command(cmd):
@@ -748,11 +836,12 @@ try:
                         command = buffer[:pos]
                         buffer = buffer[pos + 1:]
                         sensor, success, data = process_command(command)
-                        print(sensor, success, data)
+                        #print(sensor, success, data)
                     else:
                         break
                     
         motor_handler.iterate()
+        servo_handler.iterate()
         patroller_handler.iterate()
         status_handler.iterate()
 

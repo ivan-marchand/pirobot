@@ -1,10 +1,9 @@
+import asyncio
 import cv2
 import logging
 import numpy as np
 import math
 import platform
-import threading
-import time
 
 
 from handlers.base import BaseHandler
@@ -37,17 +36,18 @@ max_y_pos = 42
 
 
 def get_camera_index():
-    # checks the first 10 indexes.
     for index in [1, 0]:
         cap = cv2.VideoCapture(index)
-        if cap.read()[0]:
-            cap.release()
-            return index
+        for _ in range(5):  # allow camera to warm up
+            ret, _ = cap.read()
+            if ret:
+                cap.release()
+                return index
+        cap.release()
     return None
 
 
 class CaptureDevice(object):
-    available_device = None
 
     def __init__(self, resolution, capturing_device, angle):
         self.capturing_device = capturing_device
@@ -148,12 +148,6 @@ class CaptureDevice(object):
         _, text_h = cv2.getTextSize(text="ODO", fontFace=font, fontScale=fontScale, thickness=thickness)[0]
         cv2.putText(frame, f"ODO: {motor_status['abs_distance'] / 1000:.2f} m", (5, 5 + text_h), font, fontScale, color, thickness)
 
-        # Mode
-        if BaseHandler.state is not None:
-            state = BaseHandler.state.upper().replace("_", " ")
-            text_w, text_h = cv2.getTextSize(text=state, fontFace=font, fontScale=fontScale, thickness=thickness)[0]
-            cv2.putText(frame, state, (self.res_x - text_w - 5, 5 + text_h), font, fontScale, color, thickness)
-
         # Left
         cv2.putText(frame, f"{motor_status['left']['speed_rpm']} RPM", (5, self.res_y - 15), font, fontScale, color, thickness)
         cv2.rectangle(frame, (5, self.res_y - 50), (5 + 40, self.res_y - 50 - 400), color, thickness)
@@ -195,7 +189,7 @@ class Camera(object):
     status = "UK"
     streaming = False
     capturing = False
-    capturing_thread = None
+    capturing_task = None
     frame_rate = 5
     overlay = True
     selected_camera = "front"
@@ -206,21 +200,16 @@ class Camera(object):
     servo_center_position = 60
     servo_position = 0
     new_streaming_frame_callbacks = {}
-    streaming_frame_callbacks = threading.Lock()
+    available_device = None
 
 
     @staticmethod
     def add_new_streaming_frame_callback(name, callback):
-        Camera.streaming_frame_callbacks.acquire()
         Camera.new_streaming_frame_callbacks[name] = callback
-        Camera.streaming_frame_callbacks.release()
 
     @staticmethod
     def remove_new_streaming_frame_callback(name):
-        Camera.streaming_frame_callbacks.acquire()
-        if name in Camera.new_streaming_frame_callbacks:
-            del Camera.new_streaming_frame_callbacks[name]
-        Camera.streaming_frame_callbacks.release()
+        Camera.new_streaming_frame_callbacks.pop(name, None)
 
     @staticmethod
     def setup():
@@ -229,11 +218,18 @@ class Camera(object):
         Camera.servo_id = Config.get("camera_servo_id")
         Camera.center_position()
         Camera.frame_rate = Config.get("capturing_framerate")
-        if Config.get('front_capturing_device') == "usb":
-            Camera.available_device = get_camera_index()
+        if Config.get('front_capturing_device') == "usb" or Config.get('back_capturing_device') == "usb":
+            if not Camera.capturing:
+                Camera.available_device = get_camera_index()
             Camera.status = "KO" if Camera.available_device is None else "OK"
         else:
             Camera.status = "OK"
+        if Camera.capturing:
+            if Camera.capturing_task is not None:
+                Camera.capturing_task.cancel()
+                Camera.capturing_task = None
+            Camera.capturing = False
+            Camera.start_continuous_capture()
 
     @staticmethod
     def set_position(position):
@@ -246,62 +242,74 @@ class Camera(object):
         Camera.set_position(Camera.servo_center_position)
 
     @staticmethod
-    def capture_continuous():
+    async def capture_continuous():
         front_capturing_device = Config.get('front_capturing_device')
         front_resolution = Config.get('front_capturing_resolution')
         front_angle = Config.get('front_capturing_angle')
-        if platform.machine() not in ["aarch", "aarch64"]:
-            back_capturing_device = None
-        else:
-            back_capturing_device = Config.get('back_capturing_device')
+        back_capturing_device = Config.get('back_capturing_device')
         back_resolution = Config.get('back_capturing_resolution')
         back_angle = Config.get('back_capturing_angle')
 
-        Camera.front_capture_device = CaptureDevice(
-            resolution=front_resolution,
-            capturing_device=front_capturing_device,
-            angle=front_angle
-        )
-        if back_capturing_device is None or back_capturing_device == "none":
-            if platform.machine() not in ["aarch", "aarch64"] and Config.get('robot_has_back_camera'):
-                Camera.back_capture_device = Camera.front_capture_device
+        frame_delay = 1.0 / Camera.frame_rate
+        my_front_device = None
+        my_back_device = None
+        try:
+            my_front_device = CaptureDevice(
+                resolution=front_resolution,
+                capturing_device=front_capturing_device,
+                angle=front_angle
+            )
+            Camera.front_capture_device = my_front_device
+            if Config.get("robot_has_back_camera") and back_capturing_device != "none":
+                if platform.machine() in ["aarch", "aarch64"]:
+                    my_back_device = CaptureDevice(
+                        resolution=back_resolution,
+                        capturing_device=back_capturing_device,
+                        angle=back_angle
+                    )
+                else:
+                    my_back_device = my_front_device
+                Camera.back_capture_device = my_back_device
             else:
                 Camera.back_capture_device = None
-        else:
-            Camera.back_capture_device = CaptureDevice(
-                resolution=back_resolution,
-                capturing_device=back_capturing_device,
-                angle=back_angle
-            )
+            loop = asyncio.get_running_loop()
+            while Camera.capturing:
+                t0 = loop.time()
+                try:
+                    await asyncio.to_thread(Camera.front_capture_device.grab)
+                    if Camera.back_capture_device is not None:
+                        await asyncio.to_thread(Camera.back_capture_device.grab)
 
-        Camera.capturing = True
-        frame_delay = 1.0 / Camera.frame_rate
-        last_frame_ts = 0
-        while Camera.capturing:
-            try:
-                Camera.front_capture_device.grab()
-                if Camera.back_capture_device is not None:
-                    Camera.back_capture_device.grab()
-                now = time.time()
-                if now > last_frame_ts + frame_delay:
                     frame_delay = 1.0 / Camera.frame_rate
-                    last_frame_ts = now
                     if Camera.back_capture_device is None or Camera.selected_camera == "front":
-                        frame = Camera.front_capture_device.retrieve()
+                        frame = await asyncio.to_thread(Camera.front_capture_device.retrieve)
                         BaseHandler.emit_event(
                             topic="camera", event_type="new_front_camera_frame", data=dict(frame=frame),
                         )
-                        # Navigation
                         Camera.front_capture_device.add_navigation_lines(frame)
+                        Camera.front_capture_device.add_radar(frame, [50, 0], [25, 25])
                     else:
-                        frame = Camera.back_capture_device.retrieve()
-                    Camera.front_capture_device.add_radar(frame, [50, 0], [25, 25])
+                        frame = await asyncio.to_thread(Camera.back_capture_device.retrieve)
+                        BaseHandler.emit_event(
+                            topic="camera", event_type="new_back_camera_frame", data=dict(frame=frame),
+                        )
+
                     if Camera.back_capture_device is not None and Camera.overlay:
                         if Camera.selected_camera == "front":
-                            overlay_frame = Camera.back_capture_device.retrieve()
+                            overlay_frame = await asyncio.to_thread(Camera.back_capture_device.retrieve)
+                            BaseHandler.emit_event(
+                                topic="camera",
+                                event_type="new_back_camera_frame",
+                                data=dict(frame=overlay_frame, overlay=True),
+                            )
                             Camera.front_capture_device.add_overlay(frame, overlay_frame, [75, 0], [25, 25])
                         else:
-                            overlay_frame = Camera.front_capture_device.retrieve()
+                            overlay_frame = await asyncio.to_thread(Camera.front_capture_device.retrieve)
+                            BaseHandler.emit_event(
+                                topic="camera",
+                                event_type="new_front_camera_frame",
+                                data=dict(frame=overlay_frame, overlay=True),
+                            )
                             Camera.back_capture_device.add_overlay(frame, overlay_frame, [75, 0], [25, 25])
 
                     if frame is not None:
@@ -310,31 +318,37 @@ class Camera(object):
                         )
 
                         if Camera.streaming:
-                            frame = cv2.imencode('.jpg', frame)[1].tostring()
-                            Camera.streaming_frame_callbacks.acquire()
-                            for callback in Camera.new_streaming_frame_callbacks.values():
-                                callback(frame)
-                            Camera.streaming_frame_callbacks.release()
-            except Exception:
-                logger.error("Unexpected exception in continuous capture", exc_info=True)
-                if Camera.streaming_frame_callbacks.locked():
-                    Camera.streaming_frame_callbacks.release()
-                continue
-        Camera.front_capture_device.close()
-        Camera.front_capture_device = None
-        if Camera.back_capture_device is not None:
-            Camera.back_capture_device.close()
-            Camera.back_capture_device = None
-        Camera.capturing = False
-        logger.info("Stop Capture")
+                            jpeg_bytes = cv2.imencode('.jpg', frame)[1].tobytes()
+                            for callback in list(Camera.new_streaming_frame_callbacks.values()):
+                                try:
+                                    callback(jpeg_bytes)
+                                except Exception:
+                                    logger.error("Exception in streaming frame callback", exc_info=True)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    logger.error("Unexpected exception in continuous capture", exc_info=True)
+                elapsed = loop.time() - t0
+                await asyncio.sleep(max(0.0, frame_delay - elapsed))
+        finally:
+            if my_front_device is not None:
+                if Camera.front_capture_device is my_front_device:
+                    Camera.front_capture_device = None
+                await asyncio.to_thread(my_front_device.close)
+            if my_back_device is not None and my_back_device is not my_front_device:
+                if Camera.back_capture_device is my_back_device:
+                    Camera.back_capture_device = None
+                await asyncio.to_thread(my_back_device.close)
+            if Camera.capturing_task is None or Camera.capturing_task is asyncio.current_task():
+                Camera.capturing = False
+            logger.info("Stop Capture")
 
     @staticmethod
     def start_continuous_capture():
-        if not Camera.capturing or Camera.capturing_thread is None or not Camera.capturing_thread.is_alive():
+        if not Camera.capturing or Camera.capturing_task is None or Camera.capturing_task.done():
             Camera.capturing = True
             logger.info("Start capture")
-            Camera.capturing_thread = threading.Thread(target=Camera.capture_continuous, daemon=True)
-            Camera.capturing_thread.start()
+            Camera.capturing_task = asyncio.get_running_loop().create_task(Camera.capture_continuous())
 
     @staticmethod
     def start_streaming():

@@ -13,7 +13,7 @@ class BatteryHandler(BaseHandler):
         self.battery_level = None
         self.min_battery_volt = 11.5
         self.max_battery_volt = 13.0
-        self.register_for_event("camera", "new_streaming_frame")
+        self.register_for_event("camera", "new_front_camera_frame")
         UART.register_consumer("battery_handler", self, MessageOriginator.battery, MessageType.status)
 
     def setup(self, server):
@@ -35,12 +35,12 @@ class BatteryHandler(BaseHandler):
         else:
             color = (0, 255, 0)
         font = cv2.FONT_HERSHEY_SIMPLEX
-        fontScale = 0.8
+        font_scale = 0.8
         text_w, text_h = cv2.getTextSize(
-            text=text, fontFace=font, fontScale=fontScale, thickness=thickness
+            text=text, fontFace=font, fontScale=font_scale, thickness=thickness
         )[0]
         cv2.putText(
-            frame, text, (5, 2 * (10 + text_h)), font, fontScale, color, thickness
+            frame, text, (5, 2 * (10 + text_h)), font, font_scale, color, thickness
         )
 
     def receive_uart_message(self, message, originator, message_type):
@@ -53,5 +53,5 @@ class BatteryHandler(BaseHandler):
     def receive_event(self, topic, event_type, data):
         if self.battery_level is None:
             self.battery_level = 0
-        if topic == "camera" and event_type == "new_streaming_frame" and len(data["frame"]) > 0:
+        if topic == "camera" and event_type == "new_front_camera_frame" and len(data["frame"]) > 0 and not data.get("overlay", False):
             self.add_battery_level(data["frame"])

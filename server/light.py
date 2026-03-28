@@ -11,7 +11,7 @@ except:
 
 LEFT_LIGHT_PIN = 17
 RIGHT_LIGHT_PIN = 16
-ARM_LIGHT_PIN = 21
+ARM_LIGHT_PIN = 18
 BLINK_DURATION = 0.5
 NB_OF_BLINKS = 5
 
@@ -54,25 +54,53 @@ class Light(object):
     @staticmethod
     def set_front_light(left_on, right_on):
         Light._cancel_event()
-        Light.set(left_on, right_on, Light.arm_on)
+        Light.set(left_on=left_on, right_on=right_on)
 
     @staticmethod
     def set_light(left_on, right_on, arm_on):
         Light._cancel_event()
-        Light.set(left_on, right_on, arm_on)
+        Light.set(left_on=left_on, right_on=right_on, arm_on=arm_on)
 
     @staticmethod
-    def set(left_on, right_on, arm_on):
-        Light.left_on = left_on
-        Light.right_on = right_on
-        Light.arm_on = arm_on
-        Light._set(left_on, right_on, arm_on)
+    def set(left_on=None, right_on=None, arm_on=None):
+        if left_on is not None:
+           Light.left_on = left_on
+        if right_on is not None:
+            Light.right_on = right_on
+        if arm_on is not None:
+            Light.arm_on = arm_on
+        Light._set()
 
     @staticmethod
-    def _set(left_on, right_on, arm_on):
-        GPIO.output(LEFT_LIGHT_PIN, GPIO.HIGH if left_on else GPIO.LOW)
-        GPIO.output(RIGHT_LIGHT_PIN, GPIO.HIGH if right_on else GPIO.LOW)
-        GPIO.output(ARM_LIGHT_PIN, GPIO.HIGH if arm_on else GPIO.LOW)
+    def _set():
+        GPIO.output(LEFT_LIGHT_PIN, GPIO.HIGH if Light.left_on else GPIO.LOW)
+        GPIO.output(RIGHT_LIGHT_PIN, GPIO.HIGH if Light.right_on else GPIO.LOW)
+        GPIO.output(ARM_LIGHT_PIN, GPIO.HIGH if Light.arm_on else GPIO.LOW)
+
+    @staticmethod
+    def toggle_front_light():
+        Light._cancel_event()
+        Light.toggle(True, True)
+
+    @staticmethod
+    def toggle(left_on, right_on):
+        is_on = Light.left_on or Light.right_on
+        Light.set(left_on and not is_on, right_on and not is_on)
+
+    @staticmethod
+    def toggle_arm_light():
+        Light._cancel_event()
+        Light.set(arm_on=not Light.arm_on)
+
+    @staticmethod
+    def blink(left_on=None, right_on=None):
+        time = 0
+        if left_on or right_on:
+            for i in range(NB_OF_BLINKS * 2):
+                Light._schedule_event(time, Light.toggle, kwargs=dict(left_on=left_on, right_on=right_on))
+                time += BLINK_DURATION
+        Light._schedule_event(time, Light.set_front_light, kwargs=dict(left_on=False, right_on=False))
+        Light.set(Light.left_on, Light.right_on, Light.arm_on)
 
     @staticmethod
     def serialize():
@@ -83,22 +111,3 @@ class Light(object):
             'arm_on': Light.arm_on
         }
 
-    @staticmethod
-    def toggle_front_light():
-        Light._cancel_event()
-        Light.toggle(True, True)
-
-    @staticmethod
-    def toggle(left_on, right_on):
-        is_on = Light.left_on or Light.right_on
-        Light.set(left_on and not is_on, right_on and not is_on, Light.arm_on)
-
-    @staticmethod
-    def blink(left_on, right_on):
-        if left_on or right_on:
-            time = 0
-            for i in range(NB_OF_BLINKS * 2):
-                Light._schedule_event(time, Light.toggle, kwargs=dict(left_on=left_on, right_on=right_on))
-                time += BLINK_DURATION
-        Light._schedule_event(time, Light.set_front_light, kwargs=dict(left_on=False, right_on=False))
-        Light.set(Light.left_on, Light.right_on, Light.arm_on)

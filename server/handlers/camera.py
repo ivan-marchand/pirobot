@@ -1,7 +1,8 @@
 import cv2
 import datetime
-import time
+import logging
 import os
+import time
 
 from PIL import Image
 
@@ -9,6 +10,7 @@ from camera import Camera
 from handlers.base import BaseHandler, register_handler
 from models import Config
 
+logger = logging.getLogger(__name__)
 
 @register_handler("camera")
 class CameraHandler(BaseHandler):
@@ -31,10 +33,10 @@ class CameraHandler(BaseHandler):
         self.video_dir = os.path.join(os.environ["HOME"], "Videos/PiRobot")
         self.video_filename = None
         if not os.path.isdir(self.video_dir):
-            os.mkdir(self.video_dir)
+            os.makedirs(self.video_dir)
         self.picture_dir = os.path.join(os.environ["HOME"], "Pictures/PiRobot")
         if not os.path.isdir(self.picture_dir):
-            os.mkdir(self.picture_dir)
+            os.makedirs(self.picture_dir)
 
     async def process(self, message, protocol):
         if message["action"] == "set_position":
@@ -49,7 +51,6 @@ class CameraHandler(BaseHandler):
                 self.video_writer = None
             self.video_source = message["args"].get("source", "streaming")
             self.capture_video = True
-            await protocol.send_message("video", dict(status="recording"))
         elif message["action"] == "stop_video":
             self.capture_video = False
             self.video_start_ts = None
@@ -64,6 +65,21 @@ class CameraHandler(BaseHandler):
             self.picture_source = message["args"].get("source", "streaming")
             self.picture_format = message["args"].get("format", "png")
             self.picture_destination = message["args"].get("destination", "file")
+        elif message["action"] == "toggle_overlay":
+            Camera.overlay = not Camera.overlay
+        elif message["action"] == "toggle_camera":
+            if Camera.selected_camera == "front":
+                Camera.selected_camera = "back"
+            else:
+                Camera.selected_camera = "front"
+        elif message["action"] == "select_camera":
+            selected_camera = message["args"].get("camera")
+            if selected_camera in ["front", "back"]:
+                Camera.selected_camera = selected_camera
+            else:
+                logger.warning(f"Invalid camera: {selected_camera}")
+        else:
+            logger.warning(f"Unknown message action {message.get('action')}")
 
     def get_filename(self):
         robot_name = Config.get("robot_name")
@@ -71,15 +87,24 @@ class CameraHandler(BaseHandler):
         return f"{robot_name}_{self.video_source}_{creation_time}"
 
     def start_video(self, frame):
-        self.video_filename = f"{self.get_filename()}.avi"
+        self.video_filename = f"{self.get_filename()}.{Config.get('video_format')}"
         self.frame_rate = Camera.frame_rate
-        self.video_writer = cv2.VideoWriter(
-            filename=os.path.join(self.video_dir, self.video_filename),
-            fourcc=cv2.VideoWriter_fourcc(*Config.get("video_codec")),
-            fps=self.frame_rate,
-            frameSize=(frame.shape[1], frame.shape[0]),
-            isColor=True,
-        )
+        size = (frame.shape[1], frame.shape[0])
+        for codec in [Config.get("video_codec"), "avc1", "MJPG"]:
+            self.video_writer = cv2.VideoWriter(
+                filename=os.path.join(self.video_dir, self.video_filename),
+                fourcc=cv2.VideoWriter_fourcc(*codec),
+                fps=self.frame_rate,
+                frameSize=size,
+                isColor=True,
+            )
+            if self.video_writer.isOpened():
+                if codec != Config.get("video_codec"):
+                    logger.warning(f"Codec {Config.get('video_codec')!r} unavailable, using {codec!r}")
+                break
+        else:
+            logger.error("No working video codec found")
+            self.video_writer = None
 
     def receive_event(self, topic, event_type, data):
         if topic == "camera":
@@ -103,15 +128,19 @@ class CameraHandler(BaseHandler):
                             image = image.resize((self.server.lcd.height, self.server.lcd.width))
                             self.server.lcd.ShowImage(image)
                     else:
-                        filename=self.get_filename()
+                        filename = self.get_filename()
                         cv2.imwrite(
                             os.path.join(self.picture_dir, f"{filename}.{self.picture_format}"), data["frame"]
                         )
                     self.capture_picture = False
 
                 # Add REC indicator
-                if video_source == "streaming" and self.capture_video:
-                    self.add_rec_indicator(data["frame"])
+                if video_source == "streaming":
+                    if self.capture_video:
+                        self.add_rec_indicator(data["frame"])
+                    # Mode
+                    if BaseHandler.state is not None:
+                        self.add_mode_indicator(data["frame"])
 
     def add_rec_indicator(self, frame):
         # Add REC indicator
@@ -128,9 +157,23 @@ class CameraHandler(BaseHandler):
             frame, text, (int(res_x / 2 - text_w / 2), 5 + text_h), font, fontScale, color, thickness
         )
 
+    def add_mode_indicator(self, frame):
+        # Add REC indicator
+        res_x = len(frame[0])
+        thickness = 2
+        color = (0, 255, 0)
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        fontScale = 0.8
+
+        state = BaseHandler.state.upper().replace("_", " ")
+        text_w, text_h = cv2.getTextSize(text=state, fontFace=font, fontScale=fontScale, thickness=thickness)[0]
+        cv2.putText(frame, state, (res_x - text_w - 5, 5 + text_h), font, fontScale, color, thickness)
+
     def record_video_frame(self, frame):
         if self.video_writer is None:
             self.start_video(frame)
+        if self.video_writer is None:
+            return
         self.video_writer.write(frame)
         self.frame_counter += 1
         if self.video_start_ts is None:

@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 class MessageOriginator(Enum):
     motor = "M"
     battery = "B"
+    servo = "S"
 
 
 class MessageType(Enum):
@@ -41,7 +42,8 @@ class UART(object):
         self.loop = asyncio.get_event_loop()
         self.serial = None
         self.connect()
-        self.loop.call_soon(self.monitor_connection)
+        if Config.get("auto_uart_reconnect"):
+            self.loop.call_soon(self.monitor_connection)
 
     def monitor_connection(self):
         if self.serial is None or not self.serial.is_open:

@@ -10,8 +10,14 @@ class LightHandler(BaseHandler):
         self.register_for_message("light")
 
     async def process(self, message, protocol):
-        if message["action"] == "toggle":
+        if message["action"] in ["toggle", "toggle_front_light"]:
             Light.toggle_front_light()
+            await self.server.send_status(protocol)
         elif message["action"] == "blink":
-            args = message.get("args", {})
-            Light.blink(left_on=args.get('left_on', True), right_on=args.get('right_on', True))
+            Light.blink(**message["args"])
+        elif message["action"] == "toggle_arm_light":
+            Light.toggle_arm_light()
+            await self.server.send_status(protocol)
+        elif message["action"] == "set":
+            Light.blink(**message["args"])
+            await self.server.send_status(protocol)
