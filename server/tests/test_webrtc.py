@@ -1,7 +1,7 @@
 import asyncio
 import sys
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 import numpy as np
 
 # Ensure server/ is on the path
@@ -48,6 +48,8 @@ class TestResolveEncoder(unittest.TestCase):
                 _resolve_encoder("h264_v4l2m2m")
 
 
+@patch('webrtc.Camera.stop_streaming')
+@patch('webrtc.Camera.start_streaming')
 class TestWebRTCTrack(unittest.IsolatedAsyncioTestCase):
 
     def _make_jpeg(self, bgr: np.ndarray) -> bytes:
@@ -56,7 +58,7 @@ class TestWebRTCTrack(unittest.IsolatedAsyncioTestCase):
         _, buf = cv2.imencode('.jpg', bgr)
         return buf.tobytes()
 
-    async def test_recv_returns_av_video_frame(self):
+    async def test_recv_returns_av_video_frame(self, mock_start, mock_stop):
         from webrtc import WebRTCTrack
         import av
 
@@ -70,7 +72,7 @@ class TestWebRTCTrack(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(frame.format.name, "rgb24")
         self.assertGreaterEqual(frame.pts, 0)
 
-    async def test_pts_increments(self):
+    async def test_pts_increments(self, mock_start, mock_stop):
         from webrtc import WebRTCTrack
         track = WebRTCTrack()
         bgr = np.zeros((240, 320, 3), dtype=np.uint8)
@@ -81,22 +83,29 @@ class TestWebRTCTrack(unittest.IsolatedAsyncioTestCase):
         f2 = await asyncio.wait_for(track.recv(), timeout=2.0)
         self.assertGreater(f2.pts, f1.pts)
 
-    async def test_queue_drops_oldest_when_full(self):
+    async def test_queue_drops_oldest_when_full(self, mock_start, mock_stop):
         from webrtc import WebRTCTrack
         track = WebRTCTrack()
         bgr_first = np.full((240, 320, 3), 1, dtype=np.uint8)
-        bgr_later = np.full((240, 320, 3), 2, dtype=np.uint8)
+        bgr_later = np.full((240, 320, 3), 255, dtype=np.uint8)
         jpeg_first = self._make_jpeg(bgr_first)
         jpeg_later = self._make_jpeg(bgr_later)
 
         for _ in range(WebRTCTrack.QUEUE_SIZE):
             track.new_frame(jpeg_first)
-        track.new_frame(jpeg_later)  # should drop oldest
+        track.new_frame(jpeg_later)  # should push out an oldest frame
 
-        # new_frame calls put_nowait directly — no sleep needed
         self.assertEqual(track._queue.qsize(), WebRTCTrack.QUEUE_SIZE)
+        # Drain all frames and verify the last one is from bgr_later
+        frames = []
+        while not track._queue.empty():
+            frames.append(track._queue.get_nowait())
+        last_frame = frames[-1]
+        # The last inserted frame should be from bgr_later (all-255 pixels)
+        arr = last_frame.to_ndarray(format="rgb24")
+        self.assertGreater(arr.mean(), 200, "Last frame should be mostly white (from bgr_later)")
 
-    async def test_close_deregisters_camera_callback(self):
+    async def test_close_deregisters_camera_callback(self, mock_start, mock_stop):
         from webrtc import WebRTCTrack
         from camera import Camera
 

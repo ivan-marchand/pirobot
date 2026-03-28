@@ -7,6 +7,7 @@ from typing import Optional
 
 import av
 import aiortc.codecs.h264 as _h264
+import cv2
 import numpy as np
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.mediastreams import VideoStreamTrack
@@ -109,7 +110,6 @@ class WebRTCTrack(VideoStreamTrack):
 
     def new_frame(self, bgr_frame) -> None:
         """Called from the event loop — bgr_frame is JPEG-encoded bytes."""
-        import cv2
         arr = cv2.imdecode(np.frombuffer(bgr_frame, np.uint8), cv2.IMREAD_COLOR)
         if arr is None:
             return
