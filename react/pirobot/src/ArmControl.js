@@ -43,7 +43,7 @@ class ArmControl extends React.Component {
                 step={1}
                 aria-label={props["aria-label"]}
                 orientation="horizontal"
-                style={{width: 150}}
+                sx={{ width: '100%' }}
                 value={this.state[props.servo + "_slider_position"]}
                 onChange={this.move_arm.bind(this, props.servo)}
                 onChangeCommitted={this.stop_arm.bind(this, props.servo)}
@@ -62,7 +62,7 @@ class ArmControl extends React.Component {
                 aria-label={props["aria-label"]}
                 orientation="horizontal"
                 valueLabelDisplay="auto"
-                style={{width: 150}}
+                sx={{ width: '100%' }}
                 value={this.props.status.position[props.servo]}
                 onChange={this.move_arm_limb.bind(this, props.servo)}
                 marks={[{value: 0}]}
