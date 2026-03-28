@@ -45,19 +45,30 @@ class RobotSessionManager(SessionManager):
     async def _dispatch_webrtc(self, msg: dict) -> None:
         action = msg.get("action")
         if action == "offer":
-            await self._webrtc.handle_offer(msg["sdp"])
+            sdp = msg.get("sdp")
+            if not sdp:
+                logger.warning("webrtc offer missing sdp field")
+                return
+            await self._webrtc.handle_offer(sdp)
         elif action == "ice_candidate":
+            candidate = msg.get("candidate")
+            sdp_mid = msg.get("sdpMid")
+            sdp_mline_index = msg.get("sdpMLineIndex")
+            if candidate is None or sdp_mid is None or sdp_mline_index is None:
+                logger.warning("webrtc ice_candidate missing required fields")
+                return
             await self._webrtc.handle_ice_candidate(
-                candidate=msg["candidate"],
-                sdp_mid=msg["sdpMid"],
-                sdp_mline_index=msg["sdpMLineIndex"],
+                candidate=candidate,
+                sdp_mid=sdp_mid,
+                sdp_mline_index=sdp_mline_index,
             )
         else:
             logger.warning(f"Unknown webrtc action {action!r}")
 
     def close(self):
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
+        try:
+            loop = asyncio.get_running_loop()
             loop.create_task(self._webrtc.close())
-        else:
-            loop.run_until_complete(self._webrtc.close())
+        except RuntimeError:
+            # No running loop (e.g. called after event loop shut down); skip async cleanup
+            pass
