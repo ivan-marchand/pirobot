@@ -9,7 +9,10 @@ global.WebSocket = class {
 };
 
 // suppress VideoStreamControl WebRTC (RTCPeerConnection not available in jsdom)
-jest.mock('./VideoStreamControl', () => () => <div data-testid="video-stream" />);
+jest.mock('./VideoStreamControl', () => {
+  const { forwardRef } = require('react');
+  return { __esModule: true, default: forwardRef((_props, _ref) => <div data-testid="video-stream" />) };
+});
 
 // suppress Joystick canvas errors
 jest.mock('./ResponsiveJoystick', () => () => <div data-testid="joystick" />);
