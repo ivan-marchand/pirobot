@@ -1,35 +1,36 @@
-import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { MemoryRouter } from 'react-router-dom';
 import Home from './home';
 
-// suppress WebSocket
-global.WebSocket = class {
-  constructor() { this.onopen = null; this.onmessage = null; this.onclose = null; this.onerror = null; }
+class MockWebSocket {
+  constructor() { this.onopen = null; this.onmessage = null; this.onclose = null; this.onerror = null; this.readyState = 1; }
   send() {}
   close() {}
-};
+}
+MockWebSocket.CLOSED = 3;
+global.WebSocket = MockWebSocket;
 
-// suppress Joystick canvas errors
 jest.mock('./ResponsiveJoystick', () => () => <div data-testid="joystick" />);
-
-// suppress VideoStreamControl WebRTC (RTCPeerConnection not available in jsdom)
-jest.mock('./VideoStreamControl', () => () => <div data-testid="video-stream" />);
+jest.mock('./VideoStreamControl', () => {
+  const { forwardRef } = require('react');
+  return { __esModule: true, default: forwardRef((_props, _ref) => <div data-testid="video-stream" />) };
+});
 
 const theme = createTheme();
 const wrap = (ui) => render(
   <ThemeProvider theme={theme}><MemoryRouter>{ui}</MemoryRouter></ThemeProvider>
 );
 
-test('overflow menu button is present', () => {
+test('stop robot button is always visible in unified toolbar', () => {
   wrap(<Home />);
-  expect(screen.getByLabelText('More actions')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /stop robot/i })).toBeInTheDocument();
 });
 
-test('overflow menu opens when more button is clicked', () => {
+test('control toggle button switches between joystick and d-pad', () => {
   wrap(<Home />);
-  fireEvent.click(screen.getByLabelText('More actions'));
-  // After clicking, overflowOpen=true — the Collapse renders its children into the DOM
-  expect(screen.getAllByLabelText('Open photo gallery').length).toBeGreaterThan(0);
+  const dpadBtn = screen.getByRole('button', { name: /use d-pad/i });
+  expect(dpadBtn).toBeInTheDocument();
+  fireEvent.click(dpadBtn);
+  expect(screen.getByRole('button', { name: /use joystick/i })).toBeInTheDocument();
 });
