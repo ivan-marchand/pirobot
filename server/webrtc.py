@@ -1,10 +1,12 @@
 import asyncio
+import fractions as _fractions
 import logging
 import platform
 import uuid
 from typing import Optional
 
 import av
+import aiortc.codecs.h264 as _h264
 import numpy as np
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.mediastreams import VideoStreamTrack
@@ -18,8 +20,7 @@ logger = logging.getLogger(__name__)
 def _encoder_available(codec_name: str) -> bool:
     """Return True if the given FFmpeg encoder name is usable."""
     try:
-        ctx = av.CodecContext.create(codec_name, "w")
-        ctx.close()
+        av.CodecContext.create(codec_name, "w")
         return True
     except Exception:
         return False
@@ -45,16 +46,50 @@ def _resolve_encoder(config_value: str) -> str:
 
 # Apply hardware encoder patch once at module init, before any RTCPeerConnection is created.
 try:
-    import aiortc.codecs.h264 as _h264
     _selected_encoder = _resolve_encoder(Config.get("webrtc_h264_encoder"))
-    if _selected_encoder != "libx264":
-        _h264.H264Encoder.DEFAULT_PARAMS = {
-            **_h264.H264Encoder.DEFAULT_PARAMS,
-            "codec": _selected_encoder,
-        }
-    logger.info(f"WebRTC H.264 encoder: {_selected_encoder}")
 except Exception as exc:
-    logger.warning(f"Could not configure WebRTC encoder ({exc}), falling back to libx264")
+    logger.warning(f"Could not read webrtc_h264_encoder config ({exc}), using libx264")
+    _selected_encoder = "libx264"
+
+if _selected_encoder != "libx264":
+    _MAX_FRAME_RATE = _h264.MAX_FRAME_RATE
+
+    def _patched_encode_frame(self, frame: av.VideoFrame, force_keyframe: bool):
+        if self.codec and (
+            frame.width != self.codec.width
+            or frame.height != self.codec.height
+            or abs(self.target_bitrate - self.codec.bit_rate) / self.codec.bit_rate > 0.1
+        ):
+            self.buffer_data = b""
+            self.buffer_pts = None
+            self.codec = None
+
+        if force_keyframe:
+            frame.pict_type = av.video.frame.PictureType.I
+        else:
+            frame.pict_type = av.video.frame.PictureType.NONE
+
+        if self.codec is None:
+            self.codec = av.CodecContext.create(_selected_encoder, "w")
+            self.codec.width = frame.width
+            self.codec.height = frame.height
+            self.codec.bit_rate = self.target_bitrate
+            self.codec.pix_fmt = "yuv420p"
+            self.codec.framerate = _fractions.Fraction(_MAX_FRAME_RATE, 1)
+            self.codec.time_base = _fractions.Fraction(1, _MAX_FRAME_RATE)
+            self.codec.options = {"level": "31", "tune": "zerolatency"}
+            self.codec.profile = "Baseline"
+
+        data_to_send = b""
+        for package in self.codec.encode(frame):
+            data_to_send += bytes(package)
+
+        if data_to_send:
+            yield from self._split_bitstream(data_to_send)
+
+    _h264.H264Encoder._encode_frame = _patched_encode_frame
+
+logger.info(f"WebRTC H.264 encoder: {_selected_encoder}")
 
 
 class WebRTCTrack(VideoStreamTrack):
