@@ -4,7 +4,8 @@ version = "0.1.0"
 requires-python = ">=3.9"
 dependencies = [
     "aiohttp",
-    "aiortc",
+    "aiortc>=1.9.0,<1.10; platform_machine == 'aarch64'",
+    "aiortc; platform_machine != 'aarch64'",
     "opencv-python-headless",
     "smbus; sys_platform == 'linux'",
     "pyserial",
@@ -15,6 +16,10 @@ dependencies = [
     "prettytable",
     "pyinstaller",
     "fake-rpi; platform_machine != 'aarch64'",
+    "RPi.GPIO; platform_machine == 'aarch64'",
+    "spidev; platform_machine == 'aarch64'",
+    "numpy<2; platform_machine == 'aarch64'",
+    "setuptools<65; platform_machine == 'aarch64'",
 ]
 
 [dependency-groups]

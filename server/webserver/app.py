@@ -217,6 +217,7 @@ async def handle_message(request):
         logger.info(f"Connection closed to robot socket [{sid}]")
     finally:
         session.close()
+    return ws
 
 
 

@@ -12,10 +12,16 @@ from motor.motor import Motor
 from servo.servo_handler import ServoHandler
 
 if platform.machine() == "aarch":  # Raspberry 32 bits
-    import picamera
-    from picamera.array import PiRGBArray
+    try:
+        import picamera
+        from picamera.array import PiRGBArray
+    except ImportError:
+        picamera = None
 elif platform.machine() == "aarch64":  # Raspberry 64 bits
-    import picamera2
+    try:
+        import picamera2
+    except ImportError:
+        picamera2 = None
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +41,15 @@ poly_coefficients = np.polyfit(reference['y_pos'], alpha, 3)
 max_y_pos = 42
 
 
+def _open_usb_capture(index):
+    cap = cv2.VideoCapture(index, cv2.CAP_V4L2)
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+    return cap
+
+
 def get_camera_index():
-    for index in [1, 0]:
-        cap = cv2.VideoCapture(index)
+    for index in [0, 1]:
+        cap = _open_usb_capture(index)
         for _ in range(5):  # allow camera to warm up
             ret, _ = cap.read()
             if ret:
@@ -56,7 +68,7 @@ class CaptureDevice(object):
         self.res_x, self.res_y = int(self.res_x), int(self.res_y)
         self.angle = angle
         if self.capturing_device == "usb":  # USB Camera?
-            self.device = cv2.VideoCapture(Camera.available_device)
+            self.device = _open_usb_capture(Camera.available_device)
             self.device.set(cv2.CAP_PROP_FRAME_WIDTH, self.res_x)
             self.device.set(cv2.CAP_PROP_FRAME_HEIGHT, self.res_y)
         else:

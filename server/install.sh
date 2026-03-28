@@ -1,7 +1,14 @@
 APP_NAME=pirobot
 DAEMON_NAME=pirobotd
 
-uv run pyinstaller manage.py $(ls handlers/* | grep -v __init__.py | grep -v base.py | grep -v __pycache__ | grep -v .pyc | sed -e 's/handlers\/\(\w\+\).py/ --hidden-import  handlers.\1/g') --collect-all cv2 -F -n $DAEMON_NAME
+# Resolve uv path (not always in PATH when run via SSH)
+UV=$(which uv 2>/dev/null || echo "$HOME/.local/bin/uv")
+
+# Ensure venv has access to system packages (needed for picamera2, RPi.GPIO etc.)
+$UV venv --system-site-packages
+$UV sync
+
+$UV run pyinstaller manage.py $(ls handlers/* | grep -v __init__.py | grep -v base.py | grep -v __pycache__ | grep -v .pyc | sed -e 's/handlers\/\(\w\+\).py/ --hidden-import  handlers.\1/g') --collect-all cv2 --hidden-import picamera2 --hidden-import libcamera -F -n $DAEMON_NAME
 
 sudo cp dist/$DAEMON_NAME /usr/local/bin/
 sudo mkdir -p /etc/$APP_NAME
@@ -25,3 +32,6 @@ sudo cp -rf ../react/pirobot/build/static/* /var/www/static
 sudo cp -rf ../react/pirobot/build/index.html /var/www/
 
 sudo cp pirobot.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable pirobot
+sudo systemctl restart pirobot

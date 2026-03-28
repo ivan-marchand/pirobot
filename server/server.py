@@ -42,7 +42,10 @@ class Server(object):
 
         if self.robot_has_speaker:
             # Voice
-            self.voice_engine = pyttsx3.init()
+            try:
+                self.voice_engine = pyttsx3.init()
+            except Exception:
+                logger.warning("pyttsx3 init failed (espeak voices missing?), TTS disabled", exc_info=True)
 
             # SFX
             SFX.setup()
