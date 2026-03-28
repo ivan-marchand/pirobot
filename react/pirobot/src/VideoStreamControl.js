@@ -1,131 +1,140 @@
 import React from "react";
 
-const FPS_UPDATE_INTERVAL = 1;
+const FPS_UPDATE_INTERVAL = 1; // seconds
 
 class VideoStreamControl extends React.Component {
-
     constructor(props) {
         super(props);
-        this.state = {
-            frame: null,
-        };
-        this.ws = null
-        this.frame_counter = 0
-        this.last_frame_ts = 0
-        this.slow_mode = false
-    }
-
-    start_streaming = (ws) => {
-        console.log("Start streaming")
-        ws.send("start")
+        this._pc = null;
+        this._frameCount = 0;
+        this._lastFpsTs = 0;
+        this._fpsInterval = null;
+        this._videoRef = React.createRef();
     }
 
     componentDidMount() {
-        this.connect();
+        this._startWebRTC();
     }
-    timeout = 250; // Initial timeout duration as a class variable
 
-    /**
-     * @function connect
-     * This function establishes the connect with the websocket and also ensures constant reconnection if connection closes
-     */
-    connect = () => {
-        console.log("Connecting to video websocket");
-        let ws_url = "ws://" + (window.location.port === "3000" ? "localhost:8080" : window.location.host) + "/ws/video_stream";
+    componentWillUnmount() {
+        this._closeWebRTC();
+    }
 
-        var ws = new WebSocket(ws_url);
-        let that = this; // cache the this
-        var connectInterval;
+    _startWebRTC = async () => {
+        this._closeWebRTC();
 
-        // websocket onopen event listener
-        ws.onopen = () => {
-            console.log("Connected to video websocket");
+        const pc = new RTCPeerConnection({ iceServers: [] });
+        this._pc = pc;
 
-            this.ws = ws
-            this.start_streaming(ws);
-
-
-            that.timeout = 250; // reset timer to 250 on open of websocket connection
-            clearTimeout(connectInterval); // clear Interval on on open of websocket connection
+        pc.ontrack = (event) => {
+            if (this._videoRef.current && event.streams[0]) {
+                this._videoRef.current.srcObject = event.streams[0];
+                this._startFpsCounter();
+            }
         };
 
-        ws.onmessage = evt => {
-            // listen to data sent from the websocket server
-            this.new_frame(evt.data);
-        }
-
-        // websocket onclose event listener
-        ws.onclose = e => {
-            console.log(
-                `Socket is closed. Reconnect will be attempted in ${Math.min(
-                    10000 / 1000,
-                    (that.timeout + that.timeout) / 1000
-                )} second.`,
-                e.reason
-            );
-
-            that.timeout = that.timeout + that.timeout; //increment retry interval
-            connectInterval = setTimeout(this.check, Math.min(10000, that.timeout)); //call check function after timeout
+        pc.onicecandidate = (event) => {
+            if (event.candidate) {
+                this.props.sendWebRTCMessage({
+                    action: "ice_candidate",
+                    candidate: event.candidate.candidate,
+                    sdpMid: event.candidate.sdpMid,
+                    sdpMLineIndex: event.candidate.sdpMLineIndex,
+                });
+            }
         };
 
-        // websocket onerror event listener
-        ws.onerror = err => {
-            console.error(
-                "Socket encountered error: ",
-                err.message,
-                "Closing socket"
-            );
+        // Add a recvonly transceiver so the server knows we want video
+        pc.addTransceiver("video", { direction: "recvonly" });
 
-            ws.close();
-        };
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        this.props.sendWebRTCMessage({
+            action: "offer",
+            sdp: pc.localDescription.sdp,
+            type: "offer",
+        });
     };
 
-    /**
-     * utilited by the @function connect to check if the connection is close, if so attempts to reconnect
-     */
-    check = () => {
-        const { ws } = this.state;
-        if (!ws || ws.readyState === WebSocket.CLOSED) this.connect(); //check if websocket instance is closed, if so call `connect` function.
+    _closeWebRTC = () => {
+        if (this._pc) {
+            this._pc.close();
+            this._pc = null;
+        }
+        this._stopFpsCounter();
     };
 
-    new_frame = async (frame) => {
-        this.frame_counter += 1;
-        var now = Date.now() / 1000;
-        if (now - this.last_frame_ts > FPS_UPDATE_INTERVAL) {
-            this.props.updateFps(Math.round(this.frame_counter / (now - this.last_frame_ts)))
-            this.frame_counter = 0;
-            this.last_frame_ts = now;
+    handleWebRTCMessage = async (msg) => {
+        if (!this._pc) return;
+        if (msg.action === "answer") {
+            await this._pc.setRemoteDescription({ type: "answer", sdp: msg.sdp });
+        } else if (msg.action === "ice_candidate") {
+            await this._pc.addIceCandidate({
+                candidate: msg.candidate,
+                sdpMid: msg.sdpMid,
+                sdpMLineIndex: msg.sdpMLineIndex,
+            });
         }
-        if (this.ws !== null) {
-            this.ws.send("ready");
+    };
+
+    _startFpsCounter = () => {
+        const video = this._videoRef.current;
+        if (!video) return;
+        this._lastFpsTs = performance.now();
+        this._frameCount = 0;
+
+        if ("requestVideoFrameCallback" in HTMLVideoElement.prototype) {
+            const onFrame = (_now, _meta) => {
+                this._frameCount++;
+                const now = performance.now();
+                if ((now - this._lastFpsTs) / 1000 >= FPS_UPDATE_INTERVAL) {
+                    this.props.updateFps(
+                        Math.round(this._frameCount / ((now - this._lastFpsTs) / 1000))
+                    );
+                    this._frameCount = 0;
+                    this._lastFpsTs = now;
+                }
+                if (this._videoRef.current) {
+                    this._videoRef.current.requestVideoFrameCallback(onFrame);
+                }
+            };
+            video.requestVideoFrameCallback(onFrame);
+        } else {
+            // Safari fallback: poll with setInterval
+            this._fpsInterval = setInterval(() => {
+                if (video.readyState >= 2) {
+                    this._frameCount++;
+                    const now = performance.now();
+                    if ((now - this._lastFpsTs) / 1000 >= FPS_UPDATE_INTERVAL) {
+                        this.props.updateFps(
+                            Math.round(this._frameCount / ((now - this._lastFpsTs) / 1000))
+                        );
+                        this._frameCount = 0;
+                        this._lastFpsTs = now;
+                    }
+                }
+            }, 33); // ~30 fps poll
         }
-        this.setState({frame: await frame.arrayBuffer()});
-    }
+    };
+
+    _stopFpsCounter = () => {
+        if (this._fpsInterval) {
+            clearInterval(this._fpsInterval);
+            this._fpsInterval = null;
+        }
+    };
 
     render() {
-        let base64String = "";
-        if (this.state.frame !== null) {
-            var binary = '';
-            var bytes = new Uint8Array( this.state.frame );
-            var len = bytes.byteLength;
-            for (var i = 0; i < len; i++) {
-                binary += String.fromCharCode( bytes[ i ] );
-            }
-            base64String = btoa(binary);
-        }
-        let source = "logo512.png";
-        if (base64String !== null) {
-            source = `data:image/jpg;base64,${base64String}`;
-        }
         return (
-            <img
-                src={source}
-                style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
-                alt="Camera Feed"
-                onMouseMove={this.props.onMouseMove}
-                onClick={this.props.onClick}
+            <video
+                ref={this._videoRef}
+                autoPlay
+                playsInline
+                muted
+                style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
             />
-        )
+        );
     }
 }
 

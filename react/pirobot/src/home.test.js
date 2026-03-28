@@ -14,6 +14,9 @@ global.WebSocket = class {
 // suppress Joystick canvas errors
 jest.mock('./ResponsiveJoystick', () => () => <div data-testid="joystick" />);
 
+// suppress VideoStreamControl WebRTC (RTCPeerConnection not available in jsdom)
+jest.mock('./VideoStreamControl', () => () => <div data-testid="video-stream" />);
+
 const theme = createTheme();
 const wrap = (ui) => render(
   <ThemeProvider theme={theme}><MemoryRouter>{ui}</MemoryRouter></ThemeProvider>
