@@ -50,6 +50,12 @@ class TestResolveEncoder(unittest.TestCase):
 
 class TestWebRTCTrack(unittest.IsolatedAsyncioTestCase):
 
+    def _make_jpeg(self, bgr: np.ndarray) -> bytes:
+        """Encode a BGR numpy array as JPEG bytes, as the camera does."""
+        import cv2
+        _, buf = cv2.imencode('.jpg', bgr)
+        return buf.tobytes()
+
     async def test_recv_returns_av_video_frame(self):
         from webrtc import WebRTCTrack
         import av
@@ -57,7 +63,7 @@ class TestWebRTCTrack(unittest.IsolatedAsyncioTestCase):
         track = WebRTCTrack()
         bgr = np.zeros((240, 320, 3), dtype=np.uint8)
         bgr[10, 10] = [0, 128, 255]
-        track.new_frame(bgr)
+        track.new_frame(self._make_jpeg(bgr))
 
         frame = await asyncio.wait_for(track.recv(), timeout=2.0)
         self.assertIsInstance(frame, av.VideoFrame)
@@ -68,8 +74,9 @@ class TestWebRTCTrack(unittest.IsolatedAsyncioTestCase):
         from webrtc import WebRTCTrack
         track = WebRTCTrack()
         bgr = np.zeros((240, 320, 3), dtype=np.uint8)
-        track.new_frame(bgr)
-        track.new_frame(bgr)
+        jpeg = self._make_jpeg(bgr)
+        track.new_frame(jpeg)
+        track.new_frame(jpeg)
         f1 = await asyncio.wait_for(track.recv(), timeout=2.0)
         f2 = await asyncio.wait_for(track.recv(), timeout=2.0)
         self.assertGreater(f2.pts, f1.pts)
@@ -79,12 +86,14 @@ class TestWebRTCTrack(unittest.IsolatedAsyncioTestCase):
         track = WebRTCTrack()
         bgr_first = np.full((240, 320, 3), 1, dtype=np.uint8)
         bgr_later = np.full((240, 320, 3), 2, dtype=np.uint8)
+        jpeg_first = self._make_jpeg(bgr_first)
+        jpeg_later = self._make_jpeg(bgr_later)
+
         for _ in range(WebRTCTrack.QUEUE_SIZE):
-            track.new_frame(bgr_first)
-        track.new_frame(bgr_later)
-        # Flush event loop to process call_soon_threadsafe callbacks
-        await asyncio.sleep(0)
-        await asyncio.sleep(0)  # two yields to ensure all scheduled callbacks run
+            track.new_frame(jpeg_first)
+        track.new_frame(jpeg_later)  # should drop oldest
+
+        # new_frame calls put_nowait directly — no sleep needed
         self.assertEqual(track._queue.qsize(), WebRTCTrack.QUEUE_SIZE)
 
     async def test_close_deregisters_camera_callback(self):

@@ -104,32 +104,26 @@ class WebRTCTrack(VideoStreamTrack):
         super().__init__()
         self._callback_key = f"webrtc_{uuid.uuid4().hex}"
         self._queue: asyncio.Queue = asyncio.Queue(maxsize=self.QUEUE_SIZE)
-        self._loop = asyncio.get_event_loop()
         Camera.add_new_streaming_frame_callback(self._callback_key, self.new_frame)
         Camera.start_streaming()
 
     def new_frame(self, bgr_frame) -> None:
-        """Called from the Camera background thread. Thread-safe.
-        bgr_frame is JPEG-encoded bytes (as produced by camera.py)."""
+        """Called from the event loop — bgr_frame is JPEG-encoded bytes."""
         import cv2
         arr = cv2.imdecode(np.frombuffer(bgr_frame, np.uint8), cv2.IMREAD_COLOR)
         if arr is None:
             return
         rgb = arr[:, :, ::-1].copy()
         av_frame = av.VideoFrame.from_ndarray(rgb, format="rgb24")
-
-        def _put():
-            if self._queue.full():
-                try:
-                    self._queue.get_nowait()  # drop oldest
-                except asyncio.QueueEmpty:
-                    pass
+        if self._queue.full():
             try:
-                self._queue.put_nowait(av_frame)
-            except asyncio.QueueFull:
-                pass  # queue filled between the full() check and put_nowait; frame dropped
-
-        self._loop.call_soon_threadsafe(_put)
+                self._queue.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+        try:
+            self._queue.put_nowait(av_frame)
+        except asyncio.QueueFull:
+            pass
 
     async def recv(self) -> av.VideoFrame:
         frame = await self._queue.get()
