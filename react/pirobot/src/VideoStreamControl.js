@@ -6,6 +6,7 @@ class VideoStreamControl extends React.Component {
     constructor(props) {
         super(props);
         this._pc = null;
+        this._pendingCandidates = [];
         this._frameCount = 0;
         this._lastFpsTs = 0;
         this._fpsInterval = null;
@@ -22,6 +23,7 @@ class VideoStreamControl extends React.Component {
 
     _startWebRTC = async () => {
         this._closeWebRTC();
+        this._pendingCandidates = [];
 
         const pc = new RTCPeerConnection({ iceServers: [] });
         this._pc = pc;
@@ -65,19 +67,37 @@ class VideoStreamControl extends React.Component {
             this._pc.close();
             this._pc = null;
         }
+        this._pendingCandidates = [];
         this._stopFpsCounter();
     };
 
     handleWebRTCMessage = async (msg) => {
         if (!this._pc) return;
         if (msg.action === "answer") {
-            await this._pc.setRemoteDescription({ type: "answer", sdp: msg.sdp });
+            try {
+                await this._pc.setRemoteDescription({ type: "answer", sdp: msg.sdp });
+                for (const c of this._pendingCandidates) {
+                    await this._pc.addIceCandidate(c).catch(err =>
+                        console.warn("Buffered ICE candidate failed:", err)
+                    );
+                }
+                this._pendingCandidates = [];
+            } catch (err) {
+                console.warn("setRemoteDescription failed:", err);
+            }
         } else if (msg.action === "ice_candidate") {
-            await this._pc.addIceCandidate({
+            const candidate = {
                 candidate: msg.candidate,
                 sdpMid: msg.sdpMid,
                 sdpMLineIndex: msg.sdpMLineIndex,
-            });
+            };
+            if (this._pc.remoteDescription) {
+                await this._pc.addIceCandidate(candidate).catch(err =>
+                    console.warn("ICE candidate failed:", err)
+                );
+            } else {
+                this._pendingCandidates.push(candidate);
+            }
         }
     };
 

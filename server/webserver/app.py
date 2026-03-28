@@ -115,12 +115,15 @@ async def logs(request):
             else:
                 log_lines = log_file.readlines()[-limit - offset:-offset]
             log_lines.reverse()
-            return web.Response(body="".join(log_lines), content_type="text/plain")
+            return web.Response(text="".join(log_lines), content_type="text/plain")
     elif log_type == "app":
-        result = subprocess.run(["journalctl", "-r", "-b", "-u",  "pirobot", "-n", str(limit)], capture_output=True, text=True)
-        return web.Response(body=result.stdout, content_type="text/plain")
+        try:
+            result = subprocess.run(["journalctl", "-r", "-b", "-u", "pirobot", "-n", str(limit)], capture_output=True, text=True)
+            return web.Response(text=result.stdout, content_type="text/plain")
+        except FileNotFoundError:
+            pass
 
-    return web.Response(body="No data found", content_type="text/plain")
+    return web.Response(text="No data found", content_type="text/plain")
 
 
 @routes.get("/api/v1/pictures")

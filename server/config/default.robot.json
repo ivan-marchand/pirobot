@@ -75,6 +75,7 @@
     "front_capturing_resolution": {
       "type": "str",
       "default": "1280x720",
+      "need_setup": true,
       "category": "camera"
     },
     "front_capturing_angle": {
@@ -95,6 +96,7 @@
     "back_capturing_resolution": {
       "type": "str",
       "default": "640x480",
+      "need_setup": true,
       "category": "camera"
     },
     "back_capturing_angle": {

@@ -75,6 +75,11 @@ class Home extends React.Component {
 
             that.timeout = 250; // reset timer to 250 on open of websocket connection
             clearTimeout(connectInterval); // clear Interval on on open of websocket connection
+
+            // Restart WebRTC now that we have a fresh server connection
+            if (this.videoStreamRef.current) {
+                this.videoStreamRef.current._startWebRTC();
+            }
         };
 
         // websocket onclose event listener
@@ -86,6 +91,11 @@ class Home extends React.Component {
                 )} second.`,
                 e.reason
             );
+
+            // Close WebRTC cleanly so Firefox doesn't get confused by the dead stream
+            if (this.videoStreamRef.current) {
+                this.videoStreamRef.current._closeWebRTC();
+            }
 
             that.timeout = that.timeout + that.timeout; //increment retry interval
             connectInterval = setTimeout(this.check, Math.min(10000, that.timeout)); //call check function after timeout

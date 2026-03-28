@@ -89,13 +89,22 @@ class CameraHandler(BaseHandler):
     def start_video(self, frame):
         self.video_filename = f"{self.get_filename()}.{Config.get('video_format')}"
         self.frame_rate = Camera.frame_rate
-        self.video_writer = cv2.VideoWriter(
-            filename=os.path.join(self.video_dir, self.video_filename),
-            fourcc=cv2.VideoWriter_fourcc(*Config.get("video_codec")),
-            fps=self.frame_rate,
-            frameSize=(frame.shape[1], frame.shape[0]),
-            isColor=True,
-        )
+        size = (frame.shape[1], frame.shape[0])
+        for codec in [Config.get("video_codec"), "avc1", "MJPG"]:
+            self.video_writer = cv2.VideoWriter(
+                filename=os.path.join(self.video_dir, self.video_filename),
+                fourcc=cv2.VideoWriter_fourcc(*codec),
+                fps=self.frame_rate,
+                frameSize=size,
+                isColor=True,
+            )
+            if self.video_writer.isOpened():
+                if codec != Config.get("video_codec"):
+                    logger.warning(f"Codec {Config.get('video_codec')!r} unavailable, using {codec!r}")
+                break
+        else:
+            logger.error("No working video codec found")
+            self.video_writer = None
 
     def receive_event(self, topic, event_type, data):
         if topic == "camera":
@@ -163,6 +172,8 @@ class CameraHandler(BaseHandler):
     def record_video_frame(self, frame):
         if self.video_writer is None:
             self.start_video(frame)
+        if self.video_writer is None:
+            return
         self.video_writer.write(frame)
         self.frame_counter += 1
         if self.video_start_ts is None:

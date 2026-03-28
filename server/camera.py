@@ -219,10 +219,17 @@ class Camera(object):
         Camera.center_position()
         Camera.frame_rate = Config.get("capturing_framerate")
         if Config.get('front_capturing_device') == "usb" or Config.get('back_capturing_device') == "usb":
-            Camera.available_device = get_camera_index()
+            if not Camera.capturing:
+                Camera.available_device = get_camera_index()
             Camera.status = "KO" if Camera.available_device is None else "OK"
         else:
             Camera.status = "OK"
+        if Camera.capturing:
+            if Camera.capturing_task is not None:
+                Camera.capturing_task.cancel()
+                Camera.capturing_task = None
+            Camera.capturing = False
+            Camera.start_continuous_capture()
 
     @staticmethod
     def set_position(position):
@@ -244,24 +251,30 @@ class Camera(object):
         back_angle = Config.get('back_capturing_angle')
 
         frame_delay = 1.0 / Camera.frame_rate
+        my_front_device = None
+        my_back_device = None
         try:
-            Camera.front_capture_device = CaptureDevice(
+            my_front_device = CaptureDevice(
                 resolution=front_resolution,
                 capturing_device=front_capturing_device,
                 angle=front_angle
             )
-            if Config.get("robot_has_back_camera") and back_capturing_device not in [None, "none"]:
+            Camera.front_capture_device = my_front_device
+            if Config.get("robot_has_back_camera") and back_capturing_device != "none":
                 if platform.machine() in ["aarch", "aarch64"]:
-                    Camera.back_capture_device = CaptureDevice(
+                    my_back_device = CaptureDevice(
                         resolution=back_resolution,
                         capturing_device=back_capturing_device,
                         angle=back_angle
                     )
                 else:
-                    Camera.back_capture_device = Camera.front_capture_device
+                    my_back_device = my_front_device
+                Camera.back_capture_device = my_back_device
             else:
                 Camera.back_capture_device = None
+            loop = asyncio.get_running_loop()
             while Camera.capturing:
+                t0 = loop.time()
                 try:
                     await asyncio.to_thread(Camera.front_capture_device.grab)
                     if Camera.back_capture_device is not None:
@@ -315,15 +328,19 @@ class Camera(object):
                     raise
                 except Exception:
                     logger.error("Unexpected exception in continuous capture", exc_info=True)
-                await asyncio.sleep(frame_delay)
+                elapsed = loop.time() - t0
+                await asyncio.sleep(max(0.0, frame_delay - elapsed))
         finally:
-            if Camera.front_capture_device is not None:
-                await asyncio.to_thread(Camera.front_capture_device.close)
-                Camera.front_capture_device = None
-            if Camera.back_capture_device is not None:
-                await asyncio.to_thread(Camera.back_capture_device.close)
-                Camera.back_capture_device = None
-            Camera.capturing = False
+            if my_front_device is not None:
+                if Camera.front_capture_device is my_front_device:
+                    Camera.front_capture_device = None
+                await asyncio.to_thread(my_front_device.close)
+            if my_back_device is not None and my_back_device is not my_front_device:
+                if Camera.back_capture_device is my_back_device:
+                    Camera.back_capture_device = None
+                await asyncio.to_thread(my_back_device.close)
+            if Camera.capturing_task is None or Camera.capturing_task is asyncio.current_task():
+                Camera.capturing = False
             logger.info("Stop Capture")
 
     @staticmethod
