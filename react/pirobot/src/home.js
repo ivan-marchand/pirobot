@@ -244,91 +244,167 @@ class Home extends React.Component {
   flexDirection: 'column',
   overflow: 'hidden',
 }}>
-                <Grid container direction="column" alignItems="center" justifyContent="space-evently">
-                    <Grid item xs={2}>
-                        <Box sx={{display: 'flex', width: 'fit-content', bgcolor: 'grey', border: (theme) => `1px solid ${theme.palette.divider}`, borderRadius: 1}}>
-                            <Tooltip title="Open photo gallery"><IconButton component={Link} to="/pictures" ><PhotoLibraryIcon/></IconButton></Tooltip>
-                            <Tooltip title="Open video gallery"><IconButton component={Link} to="/videos"><VideoLibraryIcon/></IconButton></Tooltip>
-                            <Tooltip title="Robot Settings"><IconButton component={Link} to="/settings" ><SettingsIcon/></IconButton></Tooltip>
-                            <Divider orientation="vertical" flexItem/>
-                            {this.state.robot_config.robot_has_back_camera && (<Divider orientation="vertical" flexItem/>)}
-                            {this.state.robot_config.robot_has_back_camera && (<IconButton onClick={this.toogleCamera}><SwitchCameraIcon/></IconButton>)}
-                            {this.state.robot_config.robot_has_back_camera && (<IconButton onClick={this.send_action.bind(this, "camera", "toggle_overlay", {})}><PictureInPictureIcon/></IconButton>)}
-                            <Tooltip title="Record a Video"><IconButton onClick={this.send_action.bind(this, "camera", "start_video", {})}><FiberManualRecordIcon/></IconButton></Tooltip>
-                            <Tooltip title="Stop Video Recording"><IconButton onClick={this.send_action.bind(this, "camera", "stop_video", {})}><StopIcon/></IconButton></Tooltip>
-                            <Tooltip title="Take a Photo"><IconButton onClick={this.send_action.bind(this, "camera", "capture_picture", {})}><CameraAltIcon/></IconButton></Tooltip>
-                            <Divider orientation="vertical" flexItem/>
-                            {this.state.control === "joystick" && (<Tooltip title="Use D-pad"><IconButton onClick={this.toggleControl}><GamepadIcon/></IconButton></Tooltip>)}
-                            {this.state.control === "cross"  && (<Tooltip title="Use Joystick"><IconButton onClick={this.toggleControl}><ControlCameraIcon/></IconButton></Tooltip>)}
-                            {this.state.robot_config.robot_has_arm  && (<Tooltip title="Toggle Arm Control"><IconButton onClick={this.toggleArmControl}><PrecisionManufacturingIcon/></IconButton></Tooltip>)}
-                            <Divider orientation="vertical" flexItem/>
-                            {this.state.robot_config.robot_has_light && (<Tooltip title="Front Lights"><IconButton onClick={this.send_action.bind(this, "light", "toggle", {})}>{this.state.robot_status.light.left_on ? (<FlashlightOffIcon/>):(<FlashlightOnIcon/>)}</IconButton></Tooltip>)}
-                            {this.state.robot_config.robot_has_light && this.state.robot_config.robot_has_arm && (<Tooltip title="Arm Lights"><IconButton onClick={this.send_action.bind(this, "light", "toggle_arm_light", {})}>{this.state.robot_status.light.arm_on ? (<FlashlightOffIcon/>):(<FlashlightOnIcon/>)}</IconButton></Tooltip>)}
-                            {this.state.robot_config.robot_has_light && (<Divider orientation="vertical" flexItem/>)}
-                            <Tooltip title="Face Recognition"><IconButton onClick={this.send_action.bind(this, "face_detection", "toggle", {})}>{this.face_detection ? (<FaceRetouchingOffIcon/>):(<FaceIcon/>)}</IconButton></Tooltip>
-                            <Tooltip title="Start Patrolling"><IconButton onClick={this.send_action.bind(this, "drive", "patrol", {})}><RadarIcon/></IconButton></Tooltip>
-                            <Tooltip title="Stop Robot"><IconButton alt="Stop Robot" onClick={this.send_action.bind(this, "drive", "stop", {})}><DangerousIcon alt="Stop Robot"/></IconButton></Tooltip>
-                        </Box>
-                    </Grid>
-                    <Grid container item xs={10} style={{margin: 0, padding: 0}}>
-                        <Grid container item direction="row" justifyContent="center" alignItems="center" style={{margin: 0, padding: 0}}>
-                            <Grid container item xs={2} justifyContent="center" alignItems="center">
-                                <div style={{display: (this.state.control === "joystick" && !this.state.control_arm) ? "block" : "none"}}>
-                                    <ResponsiveJoystick
-                                        move={this.handleJoystickMove}
-                                        stop={this.handleStopRobot}
-                                    />
-                                </div>
-                                <div style={{paddingLeft: 5, display: (this.state.control === "cross" && !this.state.control_arm) ? "block" : "none"}}>
-                                    <DirectionCross
-                                        move={this.handleMoveRobot}
-                                        stop={this.handleStopRobot}
-                                    />
-                                </div>
-                                <div style={{paddingLeft: 5, display: this.state.control_arm ? "block" : "none"}}>
-                                    <ArmControl
-                                        move={this.move_arm}
-                                        stop={this.stop_arm}
-                                        move_limb={this.move_arm_limb}
-                                        enabled={this.state.robot_config.robot_has_arm}
-                                        status={this.state.robot_status.arm}
-                                    />
-                                </div>
-                            </Grid>
-                            <Grid container item xs={8} justifyContent="center" alignItems="center">
-                                <VideoStreamControl
-                                    onMouseMove={this.onMouseMove}
-                                    onClick={this.onClick}
-                                    updateFps={this.updateFps}
-                                />
-                            </Grid>
-                            <Grid container item xs={2} justifyContent="center" alignItems="center">
-                                { this.state.robot_config.robot_has_camera_servo && (<Stack
-                                    spacing={2}
-                                    justifyContent="center"
-                                    alignItems="center"
-                                    direction="column">
-                                    <Slider
-                                        min={0}
-                                        max={100}
-                                        step={1}
-                                        style={{height: 200}}
-                                        aria-label="Camera position"
-                                        orientation="vertical"
-                                        valueLabelDisplay="auto"
-                                        value={this.state.robot_status.camera.position}
-                                        onChange={this.set_camera_position}
-                                        marks={[{value: this.state.robot_status.camera.center_position}]}
-                                    />
-                                    <IconButton onClick={this.center_camera_position}><VerticalAlignCenterIcon/></IconButton>
-                                </Stack>)}
-                            </Grid>
-                        </Grid>
-                    </Grid>
-                    <Grid item xs={2} alignItems="top">
-                        <p style={{margin: 0, padding: 0, fontSize: "15px"}}>Connected to {this.state.robot_name} - {this.state.fps} FPS</p>
-                    </Grid>
-                </Grid>
+                {/* ── DESKTOP: toolbar (hidden on mobile) ── */}
+                <Box sx={{ display: { xs: 'none', md: 'flex' }, flexWrap: 'wrap', width: 'fit-content',
+                    bgcolor: 'grey', border: (theme) => `1px solid ${theme.palette.divider}`, borderRadius: 1 }}>
+                  <Tooltip title="Open photo gallery"><IconButton component={Link} to="/pictures"><PhotoLibraryIcon/></IconButton></Tooltip>
+                  <Tooltip title="Open video gallery"><IconButton component={Link} to="/videos"><VideoLibraryIcon/></IconButton></Tooltip>
+                  <Tooltip title="Robot Settings"><IconButton component={Link} to="/settings"><SettingsIcon/></IconButton></Tooltip>
+                  <Divider orientation="vertical" flexItem/>
+                  {this.state.robot_config.robot_has_back_camera && <IconButton onClick={this.toogleCamera}><SwitchCameraIcon/></IconButton>}
+                  {this.state.robot_config.robot_has_back_camera && <IconButton onClick={this.send_action.bind(this, "camera", "toggle_overlay", {})}><PictureInPictureIcon/></IconButton>}
+                  <Tooltip title="Record a Video"><IconButton onClick={this.send_action.bind(this, "camera", "start_video", {})}><FiberManualRecordIcon/></IconButton></Tooltip>
+                  <Tooltip title="Stop Video Recording"><IconButton onClick={this.send_action.bind(this, "camera", "stop_video", {})}><StopIcon/></IconButton></Tooltip>
+                  <Tooltip title="Take a Photo"><IconButton onClick={this.send_action.bind(this, "camera", "capture_picture", {})}><CameraAltIcon/></IconButton></Tooltip>
+                  <Divider orientation="vertical" flexItem/>
+                  {this.state.control === "joystick" && <Tooltip title="Use D-pad"><IconButton onClick={this.toggleControl}><GamepadIcon/></IconButton></Tooltip>}
+                  {this.state.control === "cross"   && <Tooltip title="Use Joystick"><IconButton onClick={this.toggleControl}><ControlCameraIcon/></IconButton></Tooltip>}
+                  {this.state.robot_config.robot_has_arm && <Tooltip title="Toggle Arm Control"><IconButton onClick={this.toggleArmControl}><PrecisionManufacturingIcon/></IconButton></Tooltip>}
+                  <Divider orientation="vertical" flexItem/>
+                  {this.state.robot_config.robot_has_light && <Tooltip title="Front Lights"><IconButton onClick={this.send_action.bind(this, "light", "toggle", {})}>{this.state.robot_status.light?.left_on ? <FlashlightOffIcon/> : <FlashlightOnIcon/>}</IconButton></Tooltip>}
+                  {this.state.robot_config.robot_has_light && this.state.robot_config.robot_has_arm && <Tooltip title="Arm Lights"><IconButton onClick={this.send_action.bind(this, "light", "toggle_arm_light", {})}>{this.state.robot_status.light?.arm_on ? <FlashlightOffIcon/> : <FlashlightOnIcon/>}</IconButton></Tooltip>}
+                  {this.state.robot_config.robot_has_light && <Divider orientation="vertical" flexItem/>}
+                  <Tooltip title="Face Recognition"><IconButton onClick={this.send_action.bind(this, "face_detection", "toggle", {})}>{this.face_detection ? <FaceRetouchingOffIcon/> : <FaceIcon/>}</IconButton></Tooltip>
+                  <Tooltip title="Start Patrolling"><IconButton onClick={this.send_action.bind(this, "drive", "patrol", {})}><RadarIcon/></IconButton></Tooltip>
+                  <Tooltip title="Stop Robot"><IconButton onClick={this.send_action.bind(this, "drive", "stop", {})}><DangerousIcon/></IconButton></Tooltip>
+                </Box>
+
+                {/* ── BODY ROW: fills remaining height, position:relative for mobile overlays ── */}
+                <Box sx={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
+
+                  {/* LEFT column: joystick/dpad/arm — desktop only */}
+                  <Box sx={{ display: { xs: 'none', md: 'flex' }, width: '16.67%', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ display: (this.state.control === "joystick" && !this.state.control_arm) ? "block" : "none" }}>
+                      <ResponsiveJoystick move={this.handleJoystickMove} stop={this.handleStopRobot} />
+                    </div>
+                    <div style={{ paddingLeft: 5, display: (this.state.control === "cross" && !this.state.control_arm) ? "block" : "none" }}>
+                      <DirectionCross move={this.handleMoveRobot} stop={this.handleStopRobot} />
+                    </div>
+                    <div style={{ paddingLeft: 5, display: this.state.control_arm ? "block" : "none" }}>
+                      <ArmControl
+                        move={this.move_arm} stop={this.stop_arm} move_limb={this.move_arm_limb}
+                        enabled={this.state.robot_config.robot_has_arm} status={this.state.robot_status.arm}
+                      />
+                    </div>
+                  </Box>
+
+                  {/* CENTER: video — always rendered, full width on mobile */}
+                  <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 0 }}>
+                    <VideoStreamControl updateFps={this.updateFps} />
+                  </Box>
+
+                  {/* RIGHT column: camera servo slider — desktop only */}
+                  <Box sx={{ display: { xs: 'none', md: 'flex' }, width: '16.67%', alignItems: 'center', justifyContent: 'center' }}>
+                    {this.state.robot_config.robot_has_camera_servo && (
+                      <Stack spacing={2} justifyContent="center" alignItems="center" direction="column">
+                        <Slider
+                          min={0} max={100} step={1}
+                          style={{ height: 200 }}
+                          aria-label="Camera position"
+                          orientation="vertical"
+                          valueLabelDisplay="auto"
+                          value={this.state.robot_status.camera?.position}
+                          onChange={this.set_camera_position}
+                          marks={[{ value: this.state.robot_status.camera?.center_position }]}
+                        />
+                        <IconButton onClick={this.center_camera_position}><VerticalAlignCenterIcon/></IconButton>
+                      </Stack>
+                    )}
+                  </Box>
+
+                  {/* ── MOBILE OVERLAYS (position:absolute, hidden on desktop) ── */}
+
+                  {/* Mobile: floating toolbar pill */}
+                  <Box sx={{
+                    display: { xs: 'flex', md: 'none' },
+                    position: 'absolute', top: 8, left: 8, right: 8, zIndex: 10,
+                    bgcolor: 'rgba(30,30,30,0.88)', borderRadius: '20px', px: 1, py: 0.5,
+                    alignItems: 'center', gap: 0.5,
+                  }}>
+                    <Tooltip title="Stop Robot">
+                      <IconButton onClick={this.send_action.bind(this, "drive", "stop", {})} sx={{ color: '#e53935' }}>
+                        <DangerousIcon/>
+                      </IconButton>
+                    </Tooltip>
+                    <Divider orientation="vertical" flexItem sx={{ borderColor: 'rgba(255,255,255,0.15)' }}/>
+                    <Tooltip title="Record a Video"><IconButton onClick={this.send_action.bind(this, "camera", "start_video", {})}><FiberManualRecordIcon/></IconButton></Tooltip>
+                    <Tooltip title="Stop Recording"><IconButton onClick={this.send_action.bind(this, "camera", "stop_video", {})}><StopIcon/></IconButton></Tooltip>
+                    <Tooltip title="Take a Photo"><IconButton onClick={this.send_action.bind(this, "camera", "capture_picture", {})}><CameraAltIcon/></IconButton></Tooltip>
+                    <Divider orientation="vertical" flexItem sx={{ borderColor: 'rgba(255,255,255,0.15)' }}/>
+                    {this.state.control === "joystick" && <Tooltip title="Use D-pad"><IconButton onClick={this.toggleControl}><GamepadIcon/></IconButton></Tooltip>}
+                    {this.state.control === "cross"   && <Tooltip title="Use Joystick"><IconButton onClick={this.toggleControl}><ControlCameraIcon/></IconButton></Tooltip>}
+                    {this.state.robot_config.robot_has_arm && <Tooltip title="Toggle Arm Control"><IconButton onClick={this.toggleArmControl}><PrecisionManufacturingIcon/></IconButton></Tooltip>}
+                    <Box sx={{ flex: 1 }}/>
+                    <IconButton aria-label="More actions" onClick={() => this.setState({ overflowOpen: !this.state.overflowOpen })}>
+                      <MoreHorizIcon/>
+                    </IconButton>
+                  </Box>
+
+                  {/* Mobile: overflow menu (slides down from toolbar) */}
+                  <Collapse in={this.state.overflowOpen} sx={{ display: { xs: 'block', md: 'none' }, position: 'absolute', top: 56, left: 8, right: 8, zIndex: 10 }}>
+                    <Box sx={{ bgcolor: 'rgba(30,30,30,0.92)', borderRadius: 2, p: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                      <Tooltip title="Open photo gallery"><IconButton component={Link} to="/pictures"><PhotoLibraryIcon/></IconButton></Tooltip>
+                      <Tooltip title="Open video gallery"><IconButton component={Link} to="/videos"><VideoLibraryIcon/></IconButton></Tooltip>
+                      <Tooltip title="Robot Settings"><IconButton component={Link} to="/settings"><SettingsIcon/></IconButton></Tooltip>
+                      {this.state.robot_config.robot_has_back_camera && <Tooltip title="Switch Camera"><IconButton onClick={this.toogleCamera}><SwitchCameraIcon/></IconButton></Tooltip>}
+                      {this.state.robot_config.robot_has_back_camera && <Tooltip title="Picture in Picture"><IconButton onClick={this.send_action.bind(this, "camera", "toggle_overlay", {})}><PictureInPictureIcon/></IconButton></Tooltip>}
+                      {this.state.robot_config.robot_has_light && <Tooltip title="Front Lights"><IconButton onClick={this.send_action.bind(this, "light", "toggle", {})}>{this.state.robot_status.light?.left_on ? <FlashlightOffIcon/> : <FlashlightOnIcon/>}</IconButton></Tooltip>}
+                      {this.state.robot_config.robot_has_light && this.state.robot_config.robot_has_arm && <Tooltip title="Arm Lights"><IconButton onClick={this.send_action.bind(this, "light", "toggle_arm_light", {})}>{this.state.robot_status.light?.arm_on ? <FlashlightOffIcon/> : <FlashlightOnIcon/>}</IconButton></Tooltip>}
+                      <Tooltip title="Face Recognition"><IconButton onClick={this.send_action.bind(this, "face_detection", "toggle", {})}>{this.face_detection ? <FaceRetouchingOffIcon/> : <FaceIcon/>}</IconButton></Tooltip>
+                      <Tooltip title="Start Patrolling"><IconButton onClick={this.send_action.bind(this, "drive", "patrol", {})}><RadarIcon/></IconButton></Tooltip>
+                    </Box>
+                  </Collapse>
+
+                  {/* Mobile: floating joystick/dpad/arm — bottom left */}
+                  <Box sx={{ display: { xs: 'block', md: 'none' }, position: 'absolute', bottom: 16, left: 16, zIndex: 10 }}>
+                    <div style={{ display: (this.state.control === "joystick" && !this.state.control_arm) ? "block" : "none" }}>
+                      <ResponsiveJoystick move={this.handleJoystickMove} stop={this.handleStopRobot} />
+                    </div>
+                    <div style={{ display: (this.state.control === "cross" && !this.state.control_arm) ? "block" : "none" }}>
+                      <DirectionCross move={this.handleMoveRobot} stop={this.handleStopRobot} />
+                    </div>
+                    <div style={{ display: this.state.control_arm ? "block" : "none" }}>
+                      <ArmControl
+                        move={this.move_arm} stop={this.stop_arm} move_limb={this.move_arm_limb}
+                        enabled={this.state.robot_config.robot_has_arm} status={this.state.robot_status.arm}
+                      />
+                    </div>
+                  </Box>
+
+                  {/* Mobile: camera servo slider — right edge */}
+                  {this.state.robot_config.robot_has_camera_servo && (
+                    <Box sx={{ display: { xs: 'flex', md: 'none' }, position: 'absolute', right: 8, top: 56, bottom: 80, zIndex: 10, flexDirection: 'column', alignItems: 'center' }}>
+                      <Slider
+                        min={0} max={100} step={1}
+                        sx={{ flex: 1 }}
+                        aria-label="Camera position"
+                        orientation="vertical"
+                        valueLabelDisplay="auto"
+                        value={this.state.robot_status.camera?.position}
+                        onChange={this.set_camera_position}
+                        marks={[{ value: this.state.robot_status.camera?.center_position }]}
+                      />
+                      <IconButton onClick={this.center_camera_position}><VerticalAlignCenterIcon/></IconButton>
+                    </Box>
+                  )}
+
+                  {/* Mobile: FPS badge — bottom right */}
+                  <Typography variant="caption" sx={{
+                    display: { xs: 'block', md: 'none' },
+                    position: 'absolute', bottom: 8, right: 8, zIndex: 10,
+                    color: 'rgba(255,255,255,0.5)', bgcolor: 'rgba(0,0,0,0.5)', borderRadius: 1, px: 1,
+                  }}>
+                    {this.state.fps} FPS
+                  </Typography>
+
+                </Box>
+
+                {/* ── STATUS BAR: desktop only ── */}
+                <Box sx={{ display: { xs: 'none', md: 'block' } }}>
+                  <p style={{ margin: 0, padding: 0, fontSize: '15px' }}>
+                    Connected to {this.state.robot_name} - {this.state.fps} FPS
+                  </p>
+                </Box>
             </Box>
         );
     }
