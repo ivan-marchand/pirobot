@@ -187,13 +187,19 @@ class WebRTCSessionManager:
         if self._pc is None:
             logger.warning("Received ICE candidate before offer — ignoring")
             return
-        from aiortc.sdp import candidate_from_sdp
-        # candidate string is "candidate:..." — strip the "candidate:" prefix for the parser
-        sdp_line = candidate if not candidate.startswith("candidate:") else candidate[len("candidate:"):]
-        ice = candidate_from_sdp(sdp_line)
-        ice.sdpMid = sdp_mid
-        ice.sdpMLineIndex = sdp_mline_index
-        await self._pc.addIceCandidate(ice)
+        if not candidate:
+            # End-of-candidates indication — nothing to add
+            return
+        try:
+            from aiortc.sdp import candidate_from_sdp
+            # Browser sends "candidate:..." — strip the prefix for the parser
+            sdp_line = candidate[len("candidate:"):] if candidate.startswith("candidate:") else candidate
+            ice = candidate_from_sdp(sdp_line)
+            ice.sdpMid = sdp_mid
+            ice.sdpMLineIndex = sdp_mline_index
+            await self._pc.addIceCandidate(ice)
+        except Exception as exc:
+            logger.warning(f"Failed to add ICE candidate ({exc}): {candidate!r}")
 
     async def close(self) -> None:
         await self._close_connection()
