@@ -108,9 +108,14 @@ class WebRTCTrack(VideoStreamTrack):
         Camera.add_new_streaming_frame_callback(self._callback_key, self.new_frame)
         Camera.start_streaming()
 
-    def new_frame(self, bgr_frame: np.ndarray) -> None:
-        """Called from the Camera background thread. Thread-safe."""
-        rgb = bgr_frame[:, :, ::-1].copy()
+    def new_frame(self, bgr_frame) -> None:
+        """Called from the Camera background thread. Thread-safe.
+        bgr_frame is JPEG-encoded bytes (as produced by camera.py)."""
+        import cv2
+        arr = cv2.imdecode(np.frombuffer(bgr_frame, np.uint8), cv2.IMREAD_COLOR)
+        if arr is None:
+            return
+        rgb = arr[:, :, ::-1].copy()
         av_frame = av.VideoFrame.from_ndarray(rgb, format="rgb24")
 
         def _put():
