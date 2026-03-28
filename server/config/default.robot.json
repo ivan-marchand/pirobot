@@ -118,6 +118,12 @@
       "default": "mp4",
       "category": "camera"
     },
+    "webrtc_h264_encoder": {
+      "type": "str",
+      "default": "auto",
+      "choices": ["auto", "h264_v4l2m2m", "libx264"],
+      "category": "camera"
+    },
     "robot_has_light": {
       "type": "bool",
       "default": false,
