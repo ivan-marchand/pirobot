@@ -243,7 +243,6 @@ class Camera(object):
         back_resolution = Config.get('back_capturing_resolution')
         back_angle = Config.get('back_capturing_angle')
 
-        Camera.capturing = True
         frame_delay = 1.0 / Camera.frame_rate
         try:
             Camera.front_capture_device = CaptureDevice(
@@ -307,7 +306,7 @@ class Camera(object):
 
                         if Camera.streaming:
                             jpeg_bytes = cv2.imencode('.jpg', frame)[1].tobytes()
-                            for callback in Camera.new_streaming_frame_callbacks.values():
+                            for callback in list(Camera.new_streaming_frame_callbacks.values()):
                                 try:
                                     callback(jpeg_bytes)
                                 except Exception:
