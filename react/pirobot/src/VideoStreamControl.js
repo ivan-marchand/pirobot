@@ -120,7 +120,7 @@ class VideoStreamControl extends React.Component {
         return (
             <img
                 src={source}
-                style={{maxHeight: this.props.max_height, maxWidth: this.props.max_width}}
+                style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
                 alt="Camera Feed"
                 onMouseMove={this.props.onMouseMove}
                 onClick={this.props.onClick}
