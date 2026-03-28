@@ -47,14 +47,17 @@ class VideoStreamControl extends React.Component {
         // Add a recvonly transceiver so the server knows we want video
         pc.addTransceiver("video", { direction: "recvonly" });
 
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-
-        this.props.sendWebRTCMessage({
-            action: "offer",
-            sdp: pc.localDescription.sdp,
-            type: "offer",
-        });
+        try {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            this.props.sendWebRTCMessage({
+                action: "offer",
+                sdp: pc.localDescription.sdp,
+                type: "offer",
+            });
+        } catch (err) {
+            console.error("WebRTC offer failed:", err);
+        }
     };
 
     _closeWebRTC = () => {
