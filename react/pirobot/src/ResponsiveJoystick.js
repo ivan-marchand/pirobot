@@ -7,7 +7,7 @@ export default function ResponsiveJoystick(props) {
   const theme = useTheme();
   const isXs = useMediaQuery(theme.breakpoints.down('sm'));
   const isSm = useMediaQuery(theme.breakpoints.between('sm', 'md'));
-  const size = isXs ? 80 : isSm ? 100 : 120;
+  const size = isXs ? 120 : isSm ? 140 : 160;
   const stickSize = Math.round(size * 0.45);
   return (
     <Joystick

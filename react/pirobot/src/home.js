@@ -238,8 +238,12 @@ class Home extends React.Component {
             <Box sx={{
   position: { xs: 'fixed', md: 'static' },
   top: { xs: 0 }, left: { xs: 0 }, right: { xs: 0 }, bottom: { xs: 0 },
+  height: { md: '100vh' },
   display: 'flex',
   flexDirection: 'column',
+  alignItems: 'center',
+  bgcolor: '#282c34',
+  color: 'white',
   overflow: 'hidden',
 }}>
                 {/* ── DESKTOP: toolbar (hidden on mobile) ── */}
@@ -268,7 +272,7 @@ class Home extends React.Component {
                 </Box>
 
                 {/* ── BODY ROW: fills remaining height, position:relative for mobile overlays ── */}
-                <Box sx={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
+                <Box sx={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative', width: '100%' }}>
 
                   {/* LEFT column: joystick/dpad/arm — desktop only */}
                   <Box sx={{ display: { xs: 'none', md: 'flex' }, width: '16.67%', alignItems: 'center', justifyContent: 'center' }}>
@@ -287,7 +291,7 @@ class Home extends React.Component {
                   </Box>
 
                   {/* CENTER: video — always rendered, full width on mobile */}
-                  <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 0 }}>
+                  <Box sx={{ flex: 1, minWidth: 0, height: '100%', overflow: 'hidden' }}>
                     <VideoStreamControl updateFps={this.updateFps} />
                   </Box>
 
@@ -316,40 +320,40 @@ class Home extends React.Component {
                   <Box sx={{
                     display: { xs: 'flex', md: 'none' },
                     position: 'absolute', top: 8, left: 8, right: 8, zIndex: 10,
-                    bgcolor: 'rgba(30,30,30,0.88)', borderRadius: '20px', px: 1, py: 0.5,
+                    bgcolor: 'rgba(30,30,30,0.92)', borderRadius: '20px', px: 1, py: 0.5,
                     alignItems: 'center', gap: 0.5,
+                    color: 'white',
                   }}>
                     <Tooltip title="Stop Robot">
                       <IconButton onClick={this.send_action.bind(this, "drive", "stop", {})} sx={{ color: '#e53935' }}>
                         <DangerousIcon/>
                       </IconButton>
                     </Tooltip>
-                    <Divider orientation="vertical" flexItem sx={{ borderColor: 'rgba(255,255,255,0.15)' }}/>
-                    <Tooltip title="Record a Video"><IconButton onClick={this.send_action.bind(this, "camera", "start_video", {})}><FiberManualRecordIcon/></IconButton></Tooltip>
-                    <Tooltip title="Stop Recording"><IconButton onClick={this.send_action.bind(this, "camera", "stop_video", {})}><StopIcon/></IconButton></Tooltip>
-                    <Tooltip title="Take a Photo"><IconButton onClick={this.send_action.bind(this, "camera", "capture_picture", {})}><CameraAltIcon/></IconButton></Tooltip>
-                    <Divider orientation="vertical" flexItem sx={{ borderColor: 'rgba(255,255,255,0.15)' }}/>
-                    {this.state.control === "joystick" && <Tooltip title="Use D-pad"><IconButton onClick={this.toggleControl}><GamepadIcon/></IconButton></Tooltip>}
-                    {this.state.control === "cross"   && <Tooltip title="Use Joystick"><IconButton onClick={this.toggleControl}><ControlCameraIcon/></IconButton></Tooltip>}
-                    {this.state.robot_config.robot_has_arm && <Tooltip title="Toggle Arm Control"><IconButton onClick={this.toggleArmControl}><PrecisionManufacturingIcon/></IconButton></Tooltip>}
-                    <Box sx={{ flex: 1 }}/>
-                    <IconButton aria-label="More actions" onClick={() => this.setState({ overflowOpen: !this.state.overflowOpen })}>
+                    <Divider orientation="vertical" flexItem sx={{ borderColor: 'rgba(255,255,255,0.3)' }}/>
+                    <Tooltip title="Record a Video"><IconButton sx={{ color: 'white' }} onClick={this.send_action.bind(this, "camera", "start_video", {})}><FiberManualRecordIcon/></IconButton></Tooltip>
+                    <Tooltip title="Stop Recording"><IconButton sx={{ color: 'white' }} onClick={this.send_action.bind(this, "camera", "stop_video", {})}><StopIcon/></IconButton></Tooltip>
+                    <Tooltip title="Take a Photo"><IconButton sx={{ color: 'white' }} onClick={this.send_action.bind(this, "camera", "capture_picture", {})}><CameraAltIcon/></IconButton></Tooltip>
+                    <Divider orientation="vertical" flexItem sx={{ borderColor: 'rgba(255,255,255,0.3)' }}/>
+                    {this.state.control === "joystick" && <Tooltip title="Use D-pad"><IconButton sx={{ color: 'white' }} onClick={this.toggleControl}><GamepadIcon/></IconButton></Tooltip>}
+                    {this.state.control === "cross"   && <Tooltip title="Use Joystick"><IconButton sx={{ color: 'white' }} onClick={this.toggleControl}><ControlCameraIcon/></IconButton></Tooltip>}
+                    {this.state.robot_config.robot_has_arm && <Tooltip title="Toggle Arm Control"><IconButton sx={{ color: 'white' }} onClick={this.toggleArmControl}><PrecisionManufacturingIcon/></IconButton></Tooltip>}
+                    <IconButton aria-label="More actions" sx={{ color: 'white', ml: 'auto' }} onClick={() => this.setState({ overflowOpen: !this.state.overflowOpen })}>
                       <MoreHorizIcon/>
                     </IconButton>
                   </Box>
 
                   {/* Mobile: overflow menu (slides down from toolbar) */}
-                  <Collapse in={this.state.overflowOpen} sx={{ display: { xs: 'block', md: 'none' }, position: 'absolute', top: 56, left: 8, right: 8, zIndex: 10 }}>
-                    <Box sx={{ bgcolor: 'rgba(30,30,30,0.92)', borderRadius: 2, p: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                      <Tooltip title="Open photo gallery"><IconButton component={Link} to="/pictures"><PhotoLibraryIcon/></IconButton></Tooltip>
-                      <Tooltip title="Open video gallery"><IconButton component={Link} to="/videos"><VideoLibraryIcon/></IconButton></Tooltip>
-                      <Tooltip title="Robot Settings"><IconButton component={Link} to="/settings"><SettingsIcon/></IconButton></Tooltip>
-                      {this.state.robot_config.robot_has_back_camera && <Tooltip title="Switch Camera"><IconButton onClick={this.toogleCamera}><SwitchCameraIcon/></IconButton></Tooltip>}
-                      {this.state.robot_config.robot_has_back_camera && <Tooltip title="Picture in Picture"><IconButton onClick={this.send_action.bind(this, "camera", "toggle_overlay", {})}><PictureInPictureIcon/></IconButton></Tooltip>}
-                      {this.state.robot_config.robot_has_light && <Tooltip title="Front Lights"><IconButton onClick={this.send_action.bind(this, "light", "toggle", {})}>{this.state.robot_status.light?.left_on ? <FlashlightOffIcon/> : <FlashlightOnIcon/>}</IconButton></Tooltip>}
-                      {this.state.robot_config.robot_has_light && this.state.robot_config.robot_has_arm && <Tooltip title="Arm Lights"><IconButton onClick={this.send_action.bind(this, "light", "toggle_arm_light", {})}>{this.state.robot_status.light?.arm_on ? <FlashlightOffIcon/> : <FlashlightOnIcon/>}</IconButton></Tooltip>}
-                      <Tooltip title="Face Recognition"><IconButton onClick={this.send_action.bind(this, "face_detection", "toggle", {})}>{this.face_detection ? <FaceRetouchingOffIcon/> : <FaceIcon/>}</IconButton></Tooltip>
-                      <Tooltip title="Start Patrolling"><IconButton onClick={this.send_action.bind(this, "drive", "patrol", {})}><RadarIcon/></IconButton></Tooltip>
+                  <Collapse in={this.state.overflowOpen} sx={{ display: { xs: 'block', md: 'none' }, position: 'absolute', top: 72, left: 8, right: 8, zIndex: 10 }}>
+                    <Box sx={{ bgcolor: 'rgba(30,30,30,0.92)', borderRadius: 2, p: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5, color: 'white' }}>
+                      <Tooltip title="Open photo gallery"><IconButton sx={{ color: 'white' }} component={Link} to="/pictures"><PhotoLibraryIcon/></IconButton></Tooltip>
+                      <Tooltip title="Open video gallery"><IconButton sx={{ color: 'white' }} component={Link} to="/videos"><VideoLibraryIcon/></IconButton></Tooltip>
+                      <Tooltip title="Robot Settings"><IconButton sx={{ color: 'white' }} component={Link} to="/settings"><SettingsIcon/></IconButton></Tooltip>
+                      {this.state.robot_config.robot_has_back_camera && <Tooltip title="Switch Camera"><IconButton sx={{ color: 'white' }} onClick={this.toogleCamera}><SwitchCameraIcon/></IconButton></Tooltip>}
+                      {this.state.robot_config.robot_has_back_camera && <Tooltip title="Picture in Picture"><IconButton sx={{ color: 'white' }} onClick={this.send_action.bind(this, "camera", "toggle_overlay", {})}><PictureInPictureIcon/></IconButton></Tooltip>}
+                      {this.state.robot_config.robot_has_light && <Tooltip title="Front Lights"><IconButton sx={{ color: 'white' }} onClick={this.send_action.bind(this, "light", "toggle", {})}>{this.state.robot_status.light?.left_on ? <FlashlightOffIcon/> : <FlashlightOnIcon/>}</IconButton></Tooltip>}
+                      {this.state.robot_config.robot_has_light && this.state.robot_config.robot_has_arm && <Tooltip title="Arm Lights"><IconButton sx={{ color: 'white' }} onClick={this.send_action.bind(this, "light", "toggle_arm_light", {})}>{this.state.robot_status.light?.arm_on ? <FlashlightOffIcon/> : <FlashlightOnIcon/>}</IconButton></Tooltip>}
+                      <Tooltip title="Face Recognition"><IconButton sx={{ color: 'white' }} onClick={this.send_action.bind(this, "face_detection", "toggle", {})}>{this.face_detection ? <FaceRetouchingOffIcon/> : <FaceIcon/>}</IconButton></Tooltip>
+                      <Tooltip title="Start Patrolling"><IconButton sx={{ color: 'white' }} onClick={this.send_action.bind(this, "drive", "patrol", {})}><RadarIcon/></IconButton></Tooltip>
                     </Box>
                   </Collapse>
 
@@ -371,7 +375,7 @@ class Home extends React.Component {
 
                   {/* Mobile: camera servo slider — right edge */}
                   {this.state.robot_config.robot_has_camera_servo && (
-                    <Box sx={{ display: { xs: 'flex', md: 'none' }, position: 'absolute', right: 8, top: 56, bottom: 80, zIndex: 10, flexDirection: 'column', alignItems: 'center' }}>
+                    <Box sx={{ display: { xs: 'flex', md: 'none' }, position: 'absolute', right: 8, top: 80, bottom: 80, zIndex: 10, flexDirection: 'column', alignItems: 'center' }}>
                       <Slider
                         min={0} max={100} step={1}
                         sx={{ flex: 1 }}
