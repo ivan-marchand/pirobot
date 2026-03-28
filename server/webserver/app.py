@@ -14,7 +14,7 @@ from PIL import Image
 
 from logger import RobotLogger
 from models import Config
-from webserver.session_manager import RobotSessionManager, VideoSessionManager
+from webserver.session_manager import RobotSessionManager
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +51,9 @@ class WebSocketProtocol(object):
 
     async def send_message(self, topic, message):
         await self.ws.send_json(dict(topic=topic, message=message))
+
+    async def send_message_raw(self, data: dict):
+        await self.ws.send_json(data)
 
     async def connection_made(self):
         # Send robot status
@@ -212,20 +215,6 @@ async def handle_message(request):
     finally:
         session.close()
 
-
-@routes.get("/ws/video_stream")
-async def video_stream(request):
-    ws = web.WebSocketResponse()
-    await ws.prepare(request)
-    sid = uuid.uuid4()
-    session = VideoSessionManager(sid=sid, ws=ws)
-    logger.info(f"New connection to video socket [{sid}]")
-
-    async for msg in ws:
-        await session.process_message(msg.data)
-
-    session.close()
-    logger.info(f"Connection closed to video socket [{sid}]")
 
 
 app = web.Application()
