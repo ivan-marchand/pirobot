@@ -11,13 +11,13 @@ export default function ResponsiveJoystick(props) {
   const stickSize = Math.round(size * 0.45);
   return (
     <Joystick
+      {...props}
       size={size}
       stickSize={stickSize}
       sticky={false}
       baseColor="grey"
       stickColor="black"
       minDistance={2}
-      {...props}
     />
   );
 }

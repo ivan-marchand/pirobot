@@ -12,6 +12,8 @@ jest.mock('react-joystick-component', () => ({
 
 jest.mock('@mui/material/useMediaQuery', () => jest.fn());
 
+afterEach(() => useMediaQuery.mockReset());
+
 const theme = createTheme();
 const wrap = (ui) => render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
 
