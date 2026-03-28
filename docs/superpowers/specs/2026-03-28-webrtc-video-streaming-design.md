@@ -14,6 +14,56 @@ Replace the current MJPEG-over-WebSocket video transport (`/ws/video_stream`) wi
 
 ---
 
+## H.264 Encoder Selection
+
+aiortc uses `libx264` (software) by default. On the Raspberry Pi, `h264_v4l2m2m` (V4L2 Memory-to-Memory hardware encoder) is available via FFmpeg/PyAV and significantly reduces CPU usage.
+
+**Strategy: platform-aware encoder with software fallback.**
+
+`WebRTCTrack` selects the encoder at construction time:
+
+```python
+import platform
+import av
+
+def _select_h264_encoder() -> str:
+    if platform.machine() == "aarch64":
+        try:
+            # probe whether the hardware encoder is available
+            codec = av.CodecContext.create("h264_v4l2m2m", "w")
+            codec.close()
+            return "h264_v4l2m2m"
+        except Exception:
+            pass
+    return "libx264"
+```
+
+aiortc's internal `H264Encoder` class hardcodes `libx264`. To use the hardware encoder, `webrtc.py` monkey-patches the encoder before creating any peer connection:
+
+```python
+import aiortc.codecs.h264 as _h264
+
+_ENCODER = _select_h264_encoder()
+if _ENCODER != "libx264":
+    _h264.H264Encoder.DEFAULT_PARAMS = {
+        **_h264.H264Encoder.DEFAULT_PARAMS,
+        "codec": _ENCODER,
+    }
+```
+
+This is a known limitation of aiortc (no first-class hardware encoder API). The patch is applied once at module import and is safe as long as all peer connections in the process use the same encoder — which is the case here.
+
+**Hardware encoder options on Pi:**
+
+| Encoder | Pi 3 | Pi 4 | Pi 5 | Notes |
+|---|---|---|---|---|
+| `h264_v4l2m2m` | ✓ | ✓ | ✓ | V4L2 M2M, available on all Pi models with FFmpeg |
+| `libx264` (fallback) | ✓ | ✓ | ✓ | Software, ~30–50% CPU at 640×480 30fps on Pi 4 |
+
+**macOS development:** `h264_v4l2m2m` is not available; the probe fails and `libx264` is used automatically. No code changes needed for dev vs production.
+
+---
+
 ## Architecture
 
 ```
