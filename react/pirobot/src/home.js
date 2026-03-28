@@ -50,6 +50,7 @@ class Home extends React.Component {
             overflowOpen: false,
         };
         this.selected_camera = "front"
+        this.videoStreamRef = React.createRef();
     }
 
 
@@ -99,6 +100,10 @@ class Home extends React.Component {
             var message = JSON.parse(evt.data);
             if (message.topic === "status") {
                 this.updateStatus(message.message)
+            } else if (message.topic === "webrtc") {
+                if (this.videoStreamRef.current) {
+                    this.videoStreamRef.current.handleWebRTCMessage(message);
+                }
             } else {
                 console.log("Unknown message topic " + message.topic)
             }
@@ -138,6 +143,10 @@ class Home extends React.Component {
         this.state.ws.send(
             JSON.stringify(json_data)
         );
+    }
+
+    sendWebRTCMessage = (msg) => {
+        this.send_json({ topic: "webrtc", ...msg });
     }
 
     handleJoystickMove = (e) => {
@@ -292,7 +301,11 @@ class Home extends React.Component {
 
                   {/* CENTER: video — always rendered, full width on mobile */}
                   <Box sx={{ flex: 1, minWidth: 0, height: '100%', overflow: 'hidden' }}>
-                    <VideoStreamControl updateFps={this.updateFps} />
+                    <VideoStreamControl
+                        ref={this.videoStreamRef}
+                        updateFps={this.updateFps}
+                        sendWebRTCMessage={this.sendWebRTCMessage}
+                    />
                   </Box>
 
                   {/* RIGHT column: camera servo slider — desktop only */}
