@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import ArmControl from './ArmControl';
 
@@ -15,14 +15,15 @@ const status = {
   position: { shoulder: 0, forearm: 0, wrist: 0, claw: 0 },
 };
 
-test('renders sliders without fixed pixel widths', () => {
+test('sliders use fluid width via sx prop (no inline width style)', () => {
   const { container } = render(
     <ThemeProvider theme={theme}>
       <ArmControl enabled={true} status={status} move={() => {}} stop={() => {}} move_limb={() => {}} />
     </ThemeProvider>
   );
   const sliders = container.querySelectorAll('.MuiSlider-root');
+  expect(sliders.length).toBeGreaterThan(0);
   sliders.forEach((slider) => {
-    expect(slider).not.toHaveStyle({ width: '150px' });
+    expect(slider.style.width).toBe('');
   });
 });
