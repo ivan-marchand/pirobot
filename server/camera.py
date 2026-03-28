@@ -37,12 +37,14 @@ max_y_pos = 42
 
 
 def get_camera_index():
-    # checks the first 10 indexes.
     for index in [1, 0]:
         cap = cv2.VideoCapture(index)
-        if cap.read()[0]:
-            cap.release()
-            return index
+        for _ in range(5):  # allow camera to warm up
+            ret, _ = cap.read()
+            if ret:
+                cap.release()
+                return index
+        cap.release()
     return None
 
 
@@ -315,7 +317,7 @@ class Camera(object):
                         )
 
                         if Camera.streaming:
-                            frame = cv2.imencode('.jpg', frame)[1].tostring()
+                            frame = cv2.imencode('.jpg', frame)[1].tobytes()
                             Camera.streaming_frame_callbacks.acquire()
                             for callback in Camera.new_streaming_frame_callbacks.values():
                                 callback(frame)

@@ -1,7 +1,7 @@
 APP_NAME=pirobot
 DAEMON_NAME=pirobotd
 
-pyinstaller manage.py $(ls handlers/* | grep -v __init__.py | grep -v base.py | grep -v __pycache__ | grep -v .pyc | sed -e 's/handlers\/\(\w\+\).py/ --hidden-import  handlers.\1/g') --collect-all cv2 -F -n $DAEMON_NAME
+uv run pyinstaller manage.py $(ls handlers/* | grep -v __init__.py | grep -v base.py | grep -v __pycache__ | grep -v .pyc | sed -e 's/handlers\/\(\w\+\).py/ --hidden-import  handlers.\1/g') --collect-all cv2 -F -n $DAEMON_NAME
 
 sudo cp dist/$DAEMON_NAME /usr/local/bin/
 sudo mkdir -p /etc/$APP_NAME

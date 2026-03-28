@@ -11,11 +11,9 @@ https://github.com/ivan-marchand/pirobot.git
 cd pirobot/server
 
 sudo apt install python3-pip
-pip install pipenv
-export PATH=$PATH:~/.local/bin
+pip install uv
 
-pipenv lock --python python3
-pipenv install --system
+uv sync
 
 ./install.sh
 

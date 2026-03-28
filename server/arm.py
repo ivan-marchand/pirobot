@@ -96,7 +96,7 @@ PRESET_POSITIONS = {
     "grab": {
         "name": "Grab From Floor",
         "moves": [
-            {"id": SHOULDER, "angle": 35},
+            {"id": SHOULDER, "angle": 351},
             {"id": WRIST, "angle": 170},
             {"id": FOREARM, "angle": 110},
         ]
@@ -187,7 +187,7 @@ class Arm(object):
                 for other_id in [i for i in exclusion_zone.keys() if i != id]:
                     if position[other_id] < exclusion_zone[other_id][0] or position[other_id] > exclusion_zone[other_id][1]:
                         all_match = False
-                if all_match and False:
+                if all_match:
                     if position[id] < exclusion_zone[id][0]:
                         return [0, exclusion_zone[id][0]]
                     elif position[id] > exclusion_zone[id][1]:
@@ -225,7 +225,8 @@ class Arm(object):
         servo_range = Arm._get_servo_range(id)
         if servo_range is not None:
             target_position = servo_range[1] if speed > 0 else servo_range[0]
-            ServoHandler.move(servo_config.get("id"), target_position, abs(speed))
+            target_position_pct = target_position * 100 / servo_config["max_angle"]
+            ServoHandler.move(servo_config.get("id"), target_position_pct, abs(speed))
             return True, "Success"
         else:
             message = "{id} is in exclusion zone, no move possible"
