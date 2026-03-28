@@ -2,7 +2,6 @@ import React from 'react';
 import Box from '@mui/material/Box';
 import Collapse from '@mui/material/Collapse';
 import Divider from '@mui/material/Divider';
-import Grid from "@mui/material/Grid";
 import Slider from "@mui/material/Slider";
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
@@ -27,7 +26,6 @@ import FlashlightOnIcon from '@mui/icons-material/FlashlightOn';
 import FlashlightOffIcon from '@mui/icons-material/FlashlightOff';
 import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturing';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
-import {Joystick} from "react-joystick-component";
 import { Link } from 'react-router-dom'
 
 import ArmControl from "./ArmControl"
