@@ -187,19 +187,12 @@ class WebRTCSessionManager:
         if self._pc is None:
             logger.warning("Received ICE candidate before offer — ignoring")
             return
-        from aiortc import RTCIceCandidate
-        ice = RTCIceCandidate(
-            component=None,
-            foundation=None,
-            ip=None,
-            port=None,
-            priority=None,
-            protocol=None,
-            type=None,
-            sdpMid=sdp_mid,
-            sdpMLineIndex=sdp_mline_index,
-        )
-        ice._candidate = candidate
+        from aiortc.sdp import candidate_from_sdp
+        # candidate string is "candidate:..." — strip the "candidate:" prefix for the parser
+        sdp_line = candidate if not candidate.startswith("candidate:") else candidate[len("candidate:"):]
+        ice = candidate_from_sdp(sdp_line)
+        ice.sdpMid = sdp_mid
+        ice.sdpMLineIndex = sdp_mline_index
         await self._pc.addIceCandidate(ice)
 
     async def close(self) -> None:
