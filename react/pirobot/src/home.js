@@ -274,16 +274,10 @@ class Home extends React.Component {
                         <Grid container item direction="row" justifyContent="center" alignItems="center" style={{margin: 0, padding: 0}}>
                             <Grid container item xs={2} justifyContent="center" alignItems="center">
                                 <div style={{display: (this.state.control === "joystick" && !this.state.control_arm) ? "block" : "none"}}>
-                                    <Joystick
-                                        size={this.state.window_width * 1.5 / 12.0}
-                                        stickSize={this.state.window_width * 0.7 / 12.0}
-                                        sticky={false}
-                                        baseColor="grey"
-                                        stickColor="black"
-                                        minDistance={2}
+                                    <ResponsiveJoystick
                                         move={this.handleJoystickMove}
-                                        stop={this.handleStopRobot}>
-                                    </Joystick>
+                                        stop={this.handleStopRobot}
+                                    />
                                 </div>
                                 <div style={{paddingLeft: 5, display: (this.state.control === "cross" && !this.state.control_arm) ? "block" : "none"}}>
                                     <DirectionCross
@@ -303,8 +297,6 @@ class Home extends React.Component {
                             </Grid>
                             <Grid container item xs={8} justifyContent="center" alignItems="center">
                                 <VideoStreamControl
-                                    max_height={this.state.window_height * 9.0 / 12.0}
-                                    max_width={this.state.window_width * 8.0 / 12.0}
                                     onMouseMove={this.onMouseMove}
                                     onClick={this.onClick}
                                     updateFps={this.updateFps}
@@ -320,7 +312,7 @@ class Home extends React.Component {
                                         min={0}
                                         max={100}
                                         step={1}
-                                        style={{height: this.state.window_height * 0.4}}
+                                        style={{height: 200}}
                                         aria-label="Camera position"
                                         orientation="vertical"
                                         valueLabelDisplay="auto"
