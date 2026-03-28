@@ -1,9 +1,11 @@
 import React from 'react';
 import Box from '@mui/material/Box';
+import Collapse from '@mui/material/Collapse';
 import Divider from '@mui/material/Divider';
 import Grid from "@mui/material/Grid";
 import Slider from "@mui/material/Slider";
 import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
 import CameraAltIcon from "@mui/icons-material/CameraAlt";
 import DangerousIcon from '@mui/icons-material/Dangerous';
 import FaceIcon from '@mui/icons-material/Face';
@@ -24,12 +26,14 @@ import ControlCameraIcon from '@mui/icons-material/ControlCamera';
 import FlashlightOnIcon from '@mui/icons-material/FlashlightOn';
 import FlashlightOffIcon from '@mui/icons-material/FlashlightOff';
 import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturing';
+import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
 import {Joystick} from "react-joystick-component";
 import { Link } from 'react-router-dom'
 
 import ArmControl from "./ArmControl"
 import DirectionCross from "./DirectionCross"
 import VideoStreamControl from "./VideoStreamControl";
+import ResponsiveJoystick from './ResponsiveJoystick';
 
 
 class Home extends React.Component {
@@ -42,22 +46,17 @@ class Home extends React.Component {
             robot_config: {},
             robot_name: null,
             robot_status: {},
-            window_height: window.innerHeight,
-            window_width: window.innerWidth,
             control: "joystick",
             control_arm: false,
             drive_slow_mode: false,
+            overflowOpen: false,
         };
         this.selected_camera = "front"
     }
 
-    handleWindowResize = () => {
-        this.setState({window_height: window.innerHeight, window_width: window.innerWidth});
-    }
 
     componentDidMount() {
         this.connect();
-        window.addEventListener('resize', this.handleWindowResize);
     }
     timeout = 250; // Initial timeout duration as a class variable
 
@@ -238,7 +237,13 @@ class Home extends React.Component {
     render() {
         document.body.style.overflow = "hidden";
         return (
-            <div className="App" style={{display: this.state.window_height > 400 ? "flex" : "block"}}>
+            <Box sx={{
+  position: { xs: 'fixed', md: 'static' },
+  top: { xs: 0 }, left: { xs: 0 }, right: { xs: 0 }, bottom: { xs: 0 },
+  display: 'flex',
+  flexDirection: 'column',
+  overflow: 'hidden',
+}}>
                 <Grid container direction="column" alignItems="center" justifyContent="space-evently">
                     <Grid item xs={2}>
                         <Box sx={{display: 'flex', width: 'fit-content', bgcolor: 'grey', border: (theme) => `1px solid ${theme.palette.divider}`, borderRadius: 1}}>
@@ -332,7 +337,7 @@ class Home extends React.Component {
                         <p style={{margin: 0, padding: 0, fontSize: "15px"}}>Connected to {this.state.robot_name} - {this.state.fps} FPS</p>
                     </Grid>
                 </Grid>
-            </div>
+            </Box>
         );
     }
 }
