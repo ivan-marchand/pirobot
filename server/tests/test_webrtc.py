@@ -82,6 +82,9 @@ class TestWebRTCTrack(unittest.IsolatedAsyncioTestCase):
         for _ in range(WebRTCTrack.QUEUE_SIZE):
             track.new_frame(bgr_first)
         track.new_frame(bgr_later)
+        # Flush event loop to process call_soon_threadsafe callbacks
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)  # two yields to ensure all scheduled callbacks run
         self.assertEqual(track._queue.qsize(), WebRTCTrack.QUEUE_SIZE)
 
     async def test_close_deregisters_camera_callback(self):

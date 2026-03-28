@@ -74,23 +74,22 @@ class WebRTCTrack(VideoStreamTrack):
         Camera.start_streaming()
 
     def new_frame(self, bgr_frame: np.ndarray) -> None:
-        """Called from the Camera background thread or event loop. Thread-safe."""
+        """Called from the Camera background thread. Thread-safe."""
         rgb = bgr_frame[:, :, ::-1].copy()
         av_frame = av.VideoFrame.from_ndarray(rgb, format="rgb24")
-        if self._queue.full():
+
+        def _put():
+            if self._queue.full():
+                try:
+                    self._queue.get_nowait()  # drop oldest
+                except asyncio.QueueEmpty:
+                    pass
             try:
-                self._queue.get_nowait()  # drop oldest
-            except asyncio.QueueEmpty:
-                pass
-        try:
-            # If already running in the event loop, call directly.
-            running_loop = asyncio.get_running_loop()
-        except RuntimeError:
-            running_loop = None
-        if running_loop is self._loop:
-            self._queue.put_nowait(av_frame)
-        else:
-            self._loop.call_soon_threadsafe(self._queue.put_nowait, av_frame)
+                self._queue.put_nowait(av_frame)
+            except asyncio.QueueFull:
+                pass  # queue filled between the full() check and put_nowait; frame dropped
+
+        self._loop.call_soon_threadsafe(_put)
 
     async def recv(self) -> av.VideoFrame:
         frame = await self._queue.get()
@@ -101,6 +100,7 @@ class WebRTCTrack(VideoStreamTrack):
 
     def close(self) -> None:
         Camera.remove_new_streaming_frame_callback(self._callback_key)
+        Camera.stop_streaming()
 
 
 class WebRTCSessionManager:
