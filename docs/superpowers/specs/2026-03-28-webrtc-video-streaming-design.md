@@ -18,49 +18,55 @@ Replace the current MJPEG-over-WebSocket video transport (`/ws/video_stream`) wi
 
 aiortc uses `libx264` (software) by default. On the Raspberry Pi, `h264_v4l2m2m` (V4L2 Memory-to-Memory hardware encoder) is available via FFmpeg/PyAV and significantly reduces CPU usage.
 
-**Strategy: platform-aware encoder with software fallback.**
+### Config key
 
-`WebRTCTrack` selects the encoder at construction time:
+A new key `webrtc_h264_encoder` is added to `server/config/default.robot.json`:
 
-```python
-import platform
-import av
-
-def _select_h264_encoder() -> str:
-    if platform.machine() == "aarch64":
-        try:
-            # probe whether the hardware encoder is available
-            codec = av.CodecContext.create("h264_v4l2m2m", "w")
-            codec.close()
-            return "h264_v4l2m2m"
-        except Exception:
-            pass
-    return "libx264"
+```json
+"webrtc_h264_encoder": {
+    "type": "str",
+    "default": "auto"
+}
 ```
 
-aiortc's internal `H264Encoder` class hardcodes `libx264`. To use the hardware encoder, `webrtc.py` monkey-patches the encoder before creating any peer connection:
+**Valid values:**
+
+| Value | Behaviour |
+|---|---|
+| `auto` | On `aarch64`: probe `h264_v4l2m2m`, use it if available, fall back to `libx264`. On all other platforms: use `libx264` directly. |
+| `h264_v4l2m2m` | Always use hardware encoder. Fails at startup with a clear error if unavailable. |
+| `libx264` | Always use software encoder. |
+
+The value can be changed at runtime via the existing config CLI:
+```bash
+python manage.py configuration update webrtc_h264_encoder h264_v4l2m2m
+```
+
+### Resolution at startup
+
+`webrtc.py` reads `Config.get("webrtc_h264_encoder")` once at module initialisation and resolves the actual encoder name via `_resolve_encoder(config_value) -> str`. The monkey-patch of aiortc's `H264Encoder` is applied immediately after, before any `RTCPeerConnection` is created:
 
 ```python
 import aiortc.codecs.h264 as _h264
 
-_ENCODER = _select_h264_encoder()
-if _ENCODER != "libx264":
+encoder = _resolve_encoder(Config.get("webrtc_h264_encoder"))
+if encoder != "libx264":
     _h264.H264Encoder.DEFAULT_PARAMS = {
         **_h264.H264Encoder.DEFAULT_PARAMS,
-        "codec": _ENCODER,
+        "codec": encoder,
     }
 ```
 
-This is a known limitation of aiortc (no first-class hardware encoder API). The patch is applied once at module import and is safe as long as all peer connections in the process use the same encoder — which is the case here.
+The patch is applied once per process. This is a known limitation of aiortc (no first-class hardware encoder API) and is safe because all peer connections in the process share the same encoder.
 
-**Hardware encoder options on Pi:**
+**Hardware encoder availability on Pi:**
 
 | Encoder | Pi 3 | Pi 4 | Pi 5 | Notes |
 |---|---|---|---|---|
 | `h264_v4l2m2m` | ✓ | ✓ | ✓ | V4L2 M2M, available on all Pi models with FFmpeg |
-| `libx264` (fallback) | ✓ | ✓ | ✓ | Software, ~30–50% CPU at 640×480 30fps on Pi 4 |
+| `libx264` | ✓ | ✓ | ✓ | Software, ~30–50% CPU at 640×480 30fps on Pi 4 |
 
-**macOS development:** `h264_v4l2m2m` is not available; the probe fails and `libx264` is used automatically. No code changes needed for dev vs production.
+**macOS development:** `auto` resolves to `libx264` (not `aarch64`). No config change needed for dev vs production.
 
 ---
 
