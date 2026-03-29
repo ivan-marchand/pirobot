@@ -15,8 +15,6 @@ from models import Config
 
 logger = logging.getLogger(__name__)
 
-_MAX_FRAME_RATE = _h264.MAX_FRAME_RATE
-
 
 def _encoder_available(codec_name: str) -> bool:
     """Return True if the given FFmpeg encoder name is usable."""
@@ -52,44 +50,43 @@ except Exception as exc:
     _selected_encoder = "libx264"
 
 
-def _patched_encode_frame(self, frame: av.VideoFrame, force_keyframe: bool):
-    if self.codec and (
-        frame.width != self.codec.width
-        or frame.height != self.codec.height
-        or abs(self.target_bitrate - self.codec.bit_rate) / max(1, self.codec.bit_rate) > 0.1
-    ):
-        self.buffer_data = b""
-        self.buffer_pts = None
-        self.codec = None
+if _selected_encoder != "libx264":
+    _MAX_FRAME_RATE = _h264.MAX_FRAME_RATE
 
-    if force_keyframe:
-        frame.pict_type = av.video.frame.PictureType.I
-    else:
-        frame.pict_type = av.video.frame.PictureType.NONE
+    def _patched_encode_frame(self, frame: av.VideoFrame, force_keyframe: bool):
+        if self.codec and (
+            frame.width != self.codec.width
+            or frame.height != self.codec.height
+            or abs(self.target_bitrate - self.codec.bit_rate) / max(1, self.codec.bit_rate) > 0.1
+        ):
+            self.buffer_data = b""
+            self.buffer_pts = None
+            self.codec = None
 
-    if self.codec is None:
-        self.codec = av.CodecContext.create(_selected_encoder, "w")
-        self.codec.width = frame.width
-        self.codec.height = frame.height
-        self.codec.bit_rate = self.target_bitrate
-        self.codec.pix_fmt = "yuv420p"
-        self.codec.framerate = _fractions.Fraction(_MAX_FRAME_RATE, 1)
-        self.codec.time_base = _fractions.Fraction(1, _MAX_FRAME_RATE)
-        if _selected_encoder == "libx264":
-            self.codec.options = {"preset": "ultrafast", "tune": "zerolatency", "level": "31"}
+        if force_keyframe:
+            frame.pict_type = av.video.frame.PictureType.I
         else:
+            frame.pict_type = av.video.frame.PictureType.NONE
+
+        if self.codec is None:
+            self.codec = av.CodecContext.create(_selected_encoder, "w")
+            self.codec.width = frame.width
+            self.codec.height = frame.height
+            self.codec.bit_rate = self.target_bitrate
+            self.codec.pix_fmt = "yuv420p"
+            self.codec.framerate = _fractions.Fraction(_MAX_FRAME_RATE, 1)
+            self.codec.time_base = _fractions.Fraction(1, _MAX_FRAME_RATE)
             self.codec.options = {"tune": "zerolatency", "level": "31"}
-        self.codec.profile = "Baseline"
+            self.codec.profile = "Baseline"
 
-    data_to_send = b""
-    for package in self.codec.encode(frame):
-        data_to_send += bytes(package)
+        data_to_send = b""
+        for package in self.codec.encode(frame):
+            data_to_send += bytes(package)
 
-    if data_to_send:
-        yield from self._split_bitstream(data_to_send)
+        if data_to_send:
+            yield from self._split_bitstream(data_to_send)
 
-
-_h264.H264Encoder._encode_frame = _patched_encode_frame
+    _h264.H264Encoder._encode_frame = _patched_encode_frame
 
 logger.info(f"WebRTC H.264 encoder: {_selected_encoder}")
 
