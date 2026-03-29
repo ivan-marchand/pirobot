@@ -31,6 +31,11 @@ class VideoStreamControl extends React.Component {
         pc.ontrack = (event) => {
             if (this._videoRef.current && event.streams[0]) {
                 this._videoRef.current.srcObject = event.streams[0];
+                // Minimize jitter buffer on local network (Chrome 86+, ignored elsewhere)
+                const receiver = pc.getReceivers().find(r => r.track.kind === "video");
+                if (receiver && "jitterBufferTarget" in receiver) {
+                    receiver.jitterBufferTarget = 0;
+                }
                 this._startFpsCounter();
             }
         };
