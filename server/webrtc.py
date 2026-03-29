@@ -7,8 +7,6 @@ from typing import Optional
 
 import av
 import aiortc.codecs.h264 as _h264
-import cv2
-import numpy as np
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.mediastreams import VideoStreamTrack
 
@@ -16,6 +14,8 @@ from camera import Camera
 from models import Config
 
 logger = logging.getLogger(__name__)
+
+_MAX_FRAME_RATE = _h264.MAX_FRAME_RATE
 
 
 def _encoder_available(codec_name: str) -> bool:
@@ -45,61 +45,62 @@ def _resolve_encoder(config_value: str) -> str:
     raise ValueError(f"Unknown webrtc_h264_encoder value: {config_value!r}")
 
 
-# Apply hardware encoder patch once at module init, before any RTCPeerConnection is created.
 try:
     _selected_encoder = _resolve_encoder(Config.get("webrtc_h264_encoder"))
 except Exception as exc:
     logger.warning(f"Could not read webrtc_h264_encoder config ({exc}), using libx264")
     _selected_encoder = "libx264"
 
-if _selected_encoder != "libx264":
-    _MAX_FRAME_RATE = _h264.MAX_FRAME_RATE
 
-    def _patched_encode_frame(self, frame: av.VideoFrame, force_keyframe: bool):
-        if self.codec and (
-            frame.width != self.codec.width
-            or frame.height != self.codec.height
-            or abs(self.target_bitrate - self.codec.bit_rate) / self.codec.bit_rate > 0.1
-        ):
-            self.buffer_data = b""
-            self.buffer_pts = None
-            self.codec = None
+def _patched_encode_frame(self, frame: av.VideoFrame, force_keyframe: bool):
+    if self.codec and (
+        frame.width != self.codec.width
+        or frame.height != self.codec.height
+        or abs(self.target_bitrate - self.codec.bit_rate) / max(1, self.codec.bit_rate) > 0.1
+    ):
+        self.buffer_data = b""
+        self.buffer_pts = None
+        self.codec = None
 
-        if force_keyframe:
-            frame.pict_type = av.video.frame.PictureType.I
+    if force_keyframe:
+        frame.pict_type = av.video.frame.PictureType.I
+    else:
+        frame.pict_type = av.video.frame.PictureType.NONE
+
+    if self.codec is None:
+        self.codec = av.CodecContext.create(_selected_encoder, "w")
+        self.codec.width = frame.width
+        self.codec.height = frame.height
+        self.codec.bit_rate = self.target_bitrate
+        self.codec.pix_fmt = "yuv420p"
+        self.codec.framerate = _fractions.Fraction(_MAX_FRAME_RATE, 1)
+        self.codec.time_base = _fractions.Fraction(1, _MAX_FRAME_RATE)
+        if _selected_encoder == "libx264":
+            self.codec.options = {"preset": "ultrafast", "tune": "zerolatency", "level": "31"}
         else:
-            frame.pict_type = av.video.frame.PictureType.NONE
+            self.codec.options = {"tune": "zerolatency", "level": "31"}
+        self.codec.profile = "Baseline"
 
-        if self.codec is None:
-            self.codec = av.CodecContext.create(_selected_encoder, "w")
-            self.codec.width = frame.width
-            self.codec.height = frame.height
-            self.codec.bit_rate = self.target_bitrate
-            self.codec.pix_fmt = "yuv420p"
-            self.codec.framerate = _fractions.Fraction(_MAX_FRAME_RATE, 1)
-            self.codec.time_base = _fractions.Fraction(1, _MAX_FRAME_RATE)
-            self.codec.options = {"level": "31", "tune": "zerolatency"}
-            self.codec.profile = "Baseline"
+    data_to_send = b""
+    for package in self.codec.encode(frame):
+        data_to_send += bytes(package)
 
-        data_to_send = b""
-        for package in self.codec.encode(frame):
-            data_to_send += bytes(package)
+    if data_to_send:
+        yield from self._split_bitstream(data_to_send)
 
-        if data_to_send:
-            yield from self._split_bitstream(data_to_send)
 
-    _h264.H264Encoder._encode_frame = _patched_encode_frame
+_h264.H264Encoder._encode_frame = _patched_encode_frame
 
 logger.info(f"WebRTC H.264 encoder: {_selected_encoder}")
 
 
 class WebRTCTrack(VideoStreamTrack):
     """
-    A VideoStreamTrack that pulls OpenCV frames from the Camera via callback
+    A VideoStreamTrack that pulls raw BGR frames from the Camera via callback
     and delivers them as av.VideoFrame to aiortc.
     """
 
-    QUEUE_SIZE = 5
+    QUEUE_SIZE = 1
 
     def __init__(self):
         super().__init__()
@@ -109,12 +110,8 @@ class WebRTCTrack(VideoStreamTrack):
         Camera.start_streaming()
 
     def new_frame(self, bgr_frame) -> None:
-        """Called from the event loop — bgr_frame is JPEG-encoded bytes."""
-        arr = cv2.imdecode(np.frombuffer(bgr_frame, np.uint8), cv2.IMREAD_COLOR)
-        if arr is None:
-            return
-        rgb = arr[:, :, ::-1].copy()
-        av_frame = av.VideoFrame.from_ndarray(rgb, format="rgb24")
+        """Called from the event loop — bgr_frame is a raw BGR numpy array."""
+        av_frame = av.VideoFrame.from_ndarray(bgr_frame, format="bgr24")
         if self._queue.full():
             try:
                 self._queue.get_nowait()
@@ -144,10 +141,6 @@ class WebRTCSessionManager:
     """
 
     def __init__(self, send_message):
-        """
-        Args:
-            send_message: async callable(dict) that sends a JSON message back over the WebSocket.
-        """
         self._send_message = send_message
         self._pc: Optional[RTCPeerConnection] = None
         self._track: Optional[WebRTCTrack] = None
@@ -187,11 +180,9 @@ class WebRTCSessionManager:
             logger.warning("Received ICE candidate before offer — ignoring")
             return
         if not candidate:
-            # End-of-candidates indication — nothing to add
             return
         try:
             from aiortc.sdp import candidate_from_sdp
-            # Browser sends "candidate:..." — strip the prefix for the parser
             sdp_line = candidate[len("candidate:"):] if candidate.startswith("candidate:") else candidate
             ice = candidate_from_sdp(sdp_line)
             ice.sdpMid = sdp_mid

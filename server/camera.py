@@ -330,10 +330,9 @@ class Camera(object):
                         )
 
                         if Camera.streaming:
-                            jpeg_bytes = cv2.imencode('.jpg', frame)[1].tobytes()
                             for callback in list(Camera.new_streaming_frame_callbacks.values()):
                                 try:
-                                    callback(jpeg_bytes)
+                                    callback(frame)
                                 except Exception:
                                     logger.error("Exception in streaming frame callback", exc_info=True)
                 except asyncio.CancelledError:
