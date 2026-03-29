@@ -273,7 +273,7 @@
     },
     "motor_dead_zone": {
       "type": "int",
-      "default": 0,
+      "default": 15,
       "need_setup": true,
       "category": "motor"
     }
