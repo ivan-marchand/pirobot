@@ -200,6 +200,7 @@ class CaptureDevice(object):
 class Camera(object):
     status = "UK"
     streaming = False
+    _streaming_clients = 0
     capturing = False
     capturing_task = None
     frame_rate = 5
@@ -363,12 +364,15 @@ class Camera(object):
 
     @staticmethod
     def start_streaming():
-        Camera.start_continuous_capture()
+        Camera._streaming_clients += 1
         Camera.streaming = True
+        Camera.start_continuous_capture()
 
     @staticmethod
     def stop_streaming():
-        Camera.streaming = False
+        Camera._streaming_clients = max(0, Camera._streaming_clients - 1)
+        if Camera._streaming_clients == 0:
+            Camera.streaming = False
 
     @staticmethod
     def stop_continuous_capture():
