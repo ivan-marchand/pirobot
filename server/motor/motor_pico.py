@@ -66,7 +66,11 @@ class PicoMotor(object):
                 else:
                     UART.write("U:C:N:N:N")
                 # Configure Motor Handler
-                UART.write(f"M:C:{steps_per_rotation}:{min_distance}:{max_rpm}:{kp}:{ki}:{kd}")
+                dead_zone = Config.get("motor_dead_zone")
+                cmd = f"M:C:{steps_per_rotation}:{min_distance}:{max_rpm}:{kp}:{ki}:{kd}"
+                if dead_zone is not None:
+                    cmd += f":{int(dead_zone)}"
+                UART.write(cmd)
                 break
             time.sleep(0.1)
         if success:
