@@ -1,7 +1,7 @@
 import asyncio
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 import numpy as np
 
 # Ensure server/ is on the path
@@ -140,6 +140,47 @@ class TestRobotMicTrack(unittest.IsolatedAsyncioTestCase):
             self.assertIsInstance(frame, av.AudioFrame)
             self.assertEqual(frame.sample_rate, 48000)
             self.assertGreaterEqual(frame.pts, 0)
+
+
+class TestBrowserAudioPlayer(unittest.IsolatedAsyncioTestCase):
+
+    async def test_stop_cancels_task(self):
+        from unittest.mock import AsyncMock
+        with patch('webrtc.sd') as mock_sd:
+            mock_sd.OutputStream.return_value.start = lambda: None
+            mock_sd.OutputStream.return_value.stop = lambda: None
+            mock_sd.OutputStream.return_value.close = lambda: None
+
+            from webrtc import BrowserAudioPlayer
+            player = BrowserAudioPlayer()
+
+            mock_track = MagicMock()
+            mock_track.recv = AsyncMock(side_effect=asyncio.CancelledError())
+
+            player.start(mock_track)
+            self.assertIsNotNone(player._task)
+            await asyncio.sleep(0)  # yield control
+            player.stop()
+            self.assertIsNone(player._task)
+
+
+class TestBrowserVideoReceiver(unittest.IsolatedAsyncioTestCase):
+
+    async def test_stop_cancels_task(self):
+        from unittest.mock import AsyncMock
+        from webrtc import BrowserVideoReceiver
+        receiver = BrowserVideoReceiver()
+
+        mock_track = MagicMock()
+        mock_track.recv = AsyncMock(side_effect=asyncio.CancelledError())
+
+        with patch('webrtc.BaseHandler') as mock_bh:
+            mock_bh.get_handler.return_value = None
+            receiver.start(mock_track)
+            self.assertIsNotNone(receiver._task)
+            await asyncio.sleep(0)
+            receiver.stop()
+            self.assertIsNone(receiver._task)
 
 
 if __name__ == "__main__":

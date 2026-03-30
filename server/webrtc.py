@@ -13,6 +13,7 @@ from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.mediastreams import AudioStreamTrack, VideoStreamTrack
 
 from camera import Camera
+from handlers.base import BaseHandler
 from models import Config
 
 logger = logging.getLogger(__name__)
@@ -161,6 +162,74 @@ class RobotMicTrack(AudioStreamTrack):
             self._sd_stream.stop()
             self._sd_stream.close()
             self._sd_stream = None
+
+
+class BrowserAudioPlayer:
+    """Plays incoming browser audio frames through the Pi speaker via sounddevice."""
+
+    def __init__(self):
+        self._task: Optional[asyncio.Task] = None
+
+    def start(self, track) -> None:
+        self._task = asyncio.ensure_future(self._play(track))
+
+    async def _play(self, track) -> None:
+        stream = None
+        try:
+            stream = sd.OutputStream(samplerate=48000, channels=1, dtype="int16")
+            stream.start()
+            while True:
+                frame = await track.recv()
+                pcm = frame.to_ndarray().flatten().astype(np.int16)
+                stream.write(pcm)
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            logger.warning(f"BrowserAudioPlayer error: {exc}")
+        finally:
+            if stream is not None:
+                try:
+                    stream.stop()
+                    stream.close()
+                except Exception:
+                    pass
+
+    def stop(self) -> None:
+        if self._task is not None:
+            self._task.cancel()
+            self._task = None
+
+
+class BrowserVideoReceiver:
+    """Forwards incoming browser webcam frames to the LCD handler."""
+
+    def __init__(self):
+        self._task: Optional[asyncio.Task] = None
+
+    def start(self, track) -> None:
+        self._task = asyncio.ensure_future(self._receive(track))
+
+    async def _receive(self, track) -> None:
+        try:
+            while True:
+                frame = await track.recv()
+                lcd = BaseHandler.get_handler("lcd")
+                if lcd is not None and lcd.eligible:
+                    img = frame.to_ndarray(format="rgb24")
+                    lcd.display_frame(img)
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            logger.warning(f"BrowserVideoReceiver error: {exc}")
+        finally:
+            lcd = BaseHandler.get_handler("lcd")
+            if lcd is not None and lcd.eligible:
+                lcd.stop_video()
+
+    def stop(self) -> None:
+        if self._task is not None:
+            self._task.cancel()
+            self._task = None
 
 
 class WebRTCTrack(VideoStreamTrack):
