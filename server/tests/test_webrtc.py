@@ -116,5 +116,31 @@ class TestWebRTCTrack(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(key, Camera.new_streaming_frame_callbacks)
 
 
+@patch('webrtc._sounddevice_available', True)
+class TestRobotMicTrack(unittest.IsolatedAsyncioTestCase):
+
+    async def test_recv_returns_audio_frame(self):
+        import av
+        import numpy as np
+
+        # Simulate what the sounddevice callback would enqueue
+        with patch('webrtc.sd') as mock_sd:
+            # Make InputStream a no-op context
+            mock_sd.InputStream.return_value.__enter__ = lambda s: s
+            mock_sd.InputStream.return_value.__exit__ = lambda *a: None
+            mock_sd.InputStream.return_value.start = lambda: None
+
+            from webrtc import RobotMicTrack
+            track = RobotMicTrack()
+            # Manually enqueue a PCM frame (960 samples of zeros)
+            pcm = np.zeros(960, dtype=np.int16)
+            track._queue.put_nowait(pcm)
+
+            frame = await asyncio.wait_for(track.recv(), timeout=2.0)
+            self.assertIsInstance(frame, av.AudioFrame)
+            self.assertEqual(frame.sample_rate, 48000)
+            self.assertGreaterEqual(frame.pts, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -5,15 +5,25 @@ import platform
 import uuid
 from typing import Optional
 
+import numpy as np
+
 import av
 import aiortc.codecs.h264 as _h264
 from aiortc import RTCPeerConnection, RTCSessionDescription
-from aiortc.mediastreams import VideoStreamTrack
+from aiortc.mediastreams import AudioStreamTrack, VideoStreamTrack
 
 from camera import Camera
 from models import Config
 
 logger = logging.getLogger(__name__)
+
+try:
+    import sounddevice as sd
+    _sounddevice_available = True
+except ImportError:
+    logger.warning("sounddevice not available — robot microphone and speaker disabled")
+    _sounddevice_available = False
+    sd = None
 
 
 def _encoder_available(codec_name: str) -> bool:
@@ -89,6 +99,61 @@ if _selected_encoder != "libx264":
     _h264.H264Encoder._encode_frame = _patched_encode_frame
 
 logger.info(f"WebRTC H.264 encoder: {_selected_encoder}")
+
+
+class RobotMicTrack(AudioStreamTrack):
+    """Captures audio from the Pi microphone at 48 kHz mono via sounddevice."""
+
+    SAMPLE_RATE = 48000
+    CHANNELS = 1
+    SAMPLES_PER_FRAME = 960  # 20 ms at 48 kHz
+
+    def __init__(self):
+        super().__init__()
+        self._queue: asyncio.Queue = asyncio.Queue(maxsize=10)
+        self._sd_stream = None
+        self._loop = asyncio.get_event_loop()
+
+    def _start_sd_stream(self) -> None:
+        def _callback(indata, frames, time_info, status):
+            if status:
+                logger.warning(f"RobotMicTrack sounddevice status: {status}")
+            pcm = (indata[:, 0] * 32767).astype(np.int16)
+            try:
+                self._loop.call_soon_threadsafe(self._queue.put_nowait, pcm.copy())
+            except asyncio.QueueFull:
+                pass
+
+        self._sd_stream = sd.InputStream(
+            samplerate=self.SAMPLE_RATE,
+            channels=self.CHANNELS,
+            dtype="float32",
+            blocksize=self.SAMPLES_PER_FRAME,
+            callback=_callback,
+        )
+        self._sd_stream.start()
+
+    async def recv(self) -> av.AudioFrame:
+        if self._sd_stream is None:
+            self._start_sd_stream()
+        pcm = await self._queue.get()
+        frame = av.AudioFrame.from_ndarray(pcm.reshape(1, -1), format="s16", layout="mono")
+        frame.sample_rate = self.SAMPLE_RATE
+        if hasattr(self, "_timestamp"):
+            self._timestamp += self.SAMPLES_PER_FRAME
+        else:
+            import time as _time
+            self._start = _time.time()
+            self._timestamp = 0
+        frame.pts = self._timestamp
+        frame.time_base = _fractions.Fraction(1, self.SAMPLE_RATE)
+        return frame
+
+    def stop(self) -> None:
+        if self._sd_stream is not None:
+            self._sd_stream.stop()
+            self._sd_stream.close()
+            self._sd_stream = None
 
 
 class WebRTCTrack(VideoStreamTrack):
