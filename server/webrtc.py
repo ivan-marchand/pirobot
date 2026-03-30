@@ -282,13 +282,29 @@ class WebRTCSessionManager:
         self._send_message = send_message
         self._pc: Optional[RTCPeerConnection] = None
         self._track: Optional[WebRTCTrack] = None
+        self._mic_track: Optional[RobotMicTrack] = None
+        self._audio_player: Optional[BrowserAudioPlayer] = None
+        self._video_receiver: Optional[BrowserVideoReceiver] = None
 
-    async def handle_offer(self, sdp: str) -> None:
+    async def handle_offer(self, sdp: str, talking: bool = False) -> None:
         await self._close_connection()
 
         self._pc = RTCPeerConnection()
         self._track = WebRTCTrack()
         self._pc.addTrack(self._track)
+
+        if talking and _sounddevice_available:
+            self._mic_track = RobotMicTrack()
+            self._pc.addTrack(self._mic_track)
+            self._audio_player = BrowserAudioPlayer()
+            self._video_receiver = BrowserVideoReceiver()
+
+            @self._pc.on("track")
+            async def on_track(track):
+                if track.kind == "audio" and self._audio_player is not None:
+                    self._audio_player.start(track)
+                elif track.kind == "video" and self._video_receiver is not None:
+                    self._video_receiver.start(track)
 
         @self._pc.on("icecandidate")
         async def on_ice_candidate(candidate):
@@ -333,6 +349,15 @@ class WebRTCSessionManager:
         await self._close_connection()
 
     async def _close_connection(self) -> None:
+        if self._mic_track is not None:
+            self._mic_track.stop()
+            self._mic_track = None
+        if self._audio_player is not None:
+            self._audio_player.stop()
+            self._audio_player = None
+        if self._video_receiver is not None:
+            self._video_receiver.stop()
+            self._video_receiver = None
         if self._track is not None:
             self._track.close()
             self._track = None

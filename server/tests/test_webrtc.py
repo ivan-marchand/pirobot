@@ -183,5 +183,55 @@ class TestBrowserVideoReceiver(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(receiver._task)
 
 
+class TestWebRTCSessionManagerTalkingMode(unittest.IsolatedAsyncioTestCase):
+
+    def _make_mock_pc(self):
+        from unittest.mock import AsyncMock
+        mock_pc = MagicMock()
+        mock_pc.setRemoteDescription = AsyncMock()
+        mock_pc.createAnswer = AsyncMock(return_value=MagicMock(sdp="answer_sdp"))
+        mock_pc.setLocalDescription = AsyncMock()
+        mock_pc.localDescription = MagicMock(sdp="answer_sdp")
+        mock_pc.on = MagicMock(side_effect=lambda event: (lambda fn: fn))
+        mock_pc.close = AsyncMock()
+        return mock_pc
+
+    async def test_handle_offer_talking_creates_mic_track(self):
+        with patch('webrtc._sounddevice_available', True), \
+             patch('webrtc.RobotMicTrack') as MockMicTrack, \
+             patch('webrtc.BrowserAudioPlayer') as MockPlayer, \
+             patch('webrtc.BrowserVideoReceiver') as MockReceiver, \
+             patch('webrtc.RTCPeerConnection') as MockPC, \
+             patch('webrtc.WebRTCTrack'):
+
+            from unittest.mock import AsyncMock
+            MockPC.return_value = self._make_mock_pc()
+
+            from webrtc import WebRTCSessionManager
+            session = WebRTCSessionManager(send_message=AsyncMock())
+            await session.handle_offer(sdp="fake_sdp", talking=True)
+
+            MockMicTrack.assert_called_once()
+            MockPlayer.assert_called_once()
+            MockReceiver.assert_called_once()
+
+    async def test_handle_offer_not_talking_skips_audio(self):
+        with patch('webrtc._sounddevice_available', True), \
+             patch('webrtc.RobotMicTrack') as MockMicTrack, \
+             patch('webrtc.BrowserAudioPlayer') as MockPlayer, \
+             patch('webrtc.RTCPeerConnection') as MockPC, \
+             patch('webrtc.WebRTCTrack'):
+
+            from unittest.mock import AsyncMock
+            MockPC.return_value = self._make_mock_pc()
+
+            from webrtc import WebRTCSessionManager
+            session = WebRTCSessionManager(send_message=AsyncMock())
+            await session.handle_offer(sdp="fake_sdp", talking=False)
+
+            MockMicTrack.assert_not_called()
+            MockPlayer.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

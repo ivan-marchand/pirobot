@@ -49,7 +49,8 @@ class RobotSessionManager(SessionManager):
             if not sdp:
                 logger.warning("webrtc offer missing sdp field")
                 return
-            await self._webrtc.handle_offer(sdp)
+            talking = bool(msg.get("talking", False))
+            await self._webrtc.handle_offer(sdp, talking=talking)
         elif action == "ice_candidate":
             candidate = msg.get("candidate")
             sdp_mid = msg.get("sdpMid")
