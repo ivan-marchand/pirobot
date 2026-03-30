@@ -30,3 +30,14 @@ class LcdHandler(BaseHandler):
         else:
             logger.info(f"Picture not found {name}")
 
+    def display_frame(self, frame):
+        from PIL import Image as PILImage
+        img = PILImage.fromarray(frame, 'RGB')
+        img = img.resize((self.server.lcd.height, self.server.lcd.width))
+        self.server.lcd.ShowImage(img)
+
+    def stop_video(self):
+        from PIL import Image as PILImage
+        img = PILImage.new('RGB', (self.server.lcd.height, self.server.lcd.width), color=(0, 0, 0))
+        self.server.lcd.ShowImage(img)
+
