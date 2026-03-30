@@ -219,6 +219,7 @@ class TestWebRTCSessionManagerTalkingMode(unittest.IsolatedAsyncioTestCase):
         with patch('webrtc._sounddevice_available', True), \
              patch('webrtc.RobotMicTrack') as MockMicTrack, \
              patch('webrtc.BrowserAudioPlayer') as MockPlayer, \
+             patch('webrtc.BrowserVideoReceiver') as MockReceiver, \
              patch('webrtc.RTCPeerConnection') as MockPC, \
              patch('webrtc.WebRTCTrack'):
 
@@ -231,6 +232,7 @@ class TestWebRTCSessionManagerTalkingMode(unittest.IsolatedAsyncioTestCase):
 
             MockMicTrack.assert_not_called()
             MockPlayer.assert_not_called()
+            MockReceiver.assert_not_called()
 
 
 if __name__ == "__main__":
