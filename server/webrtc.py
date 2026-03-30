@@ -119,10 +119,19 @@ class RobotMicTrack(AudioStreamTrack):
             if status:
                 logger.warning(f"RobotMicTrack sounddevice status: {status}")
             pcm = (indata[:, 0] * 32767).astype(np.int16)
-            try:
-                self._loop.call_soon_threadsafe(self._queue.put_nowait, pcm.copy())
-            except asyncio.QueueFull:
-                pass
+
+            def _enqueue(data):
+                if self._queue.full():
+                    try:
+                        self._queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        pass
+                try:
+                    self._queue.put_nowait(data)
+                except asyncio.QueueFull:
+                    pass
+
+            self._loop.call_soon_threadsafe(_enqueue, pcm.copy())
 
         self._sd_stream = sd.InputStream(
             samplerate=self.SAMPLE_RATE,
@@ -142,8 +151,6 @@ class RobotMicTrack(AudioStreamTrack):
         if hasattr(self, "_timestamp"):
             self._timestamp += self.SAMPLES_PER_FRAME
         else:
-            import time as _time
-            self._start = _time.time()
             self._timestamp = 0
         frame.pts = self._timestamp
         frame.time_base = _fractions.Fraction(1, self.SAMPLE_RATE)
