@@ -270,6 +270,12 @@
       "default": 0.003,
       "need_setup": true,
       "category": "motor"
+    },
+    "motor_dead_zone": {
+      "type": "int",
+      "default": 15,
+      "need_setup": true,
+      "category": "motor"
     }
   }
 }

@@ -1,4 +1,5 @@
 from machine import ADC, Pin, PWM, UART, Timer
+from micropython import disable_irq, enable_irq
 import utime
 
 # Global variables
@@ -138,7 +139,7 @@ class ServoHandler(object):
                     max_speed = None
                 self.configure(servo, min_ps, max_ps, max_speed)
             else:
-                return False, f"[Servo] Unknonw command {command}"
+                return False, f"[Servo] Unknown command {command}"
         except Exception as e:
             print(e)
             return False, f"[Servo] Unable to decode arguments {args}"
@@ -173,7 +174,7 @@ class BatteryHandler(object):
             elif command == "S":
                 uart.write(self.get_status() + "\n")
             else:
-                return False, f"[Battery] Unknonw command {command}"
+                return False, f"[Battery] Unknown command {command}"
         except Exception as e:
             print(e)
             return False, f"[Battery] Unable to decode arguments {args}"
@@ -283,10 +284,10 @@ class UltraSonicHandler(object):
                 self.sensors = []
                 self.start(left=left, front=front, right=right)
             else:
-                return False, f"[Servo] Unknonw command {command}"
+                return False, f"[UltraSonic] Unknown command {command}"
         except Exception as e:
             print(e)
-            return False, f"[Servo] Unable to decode arguments {args}"
+            return False, f"[UltraSonic] Unable to decode arguments {args}"
         return True, "OK"
 
 class MotorHandler(object):
@@ -364,6 +365,7 @@ class MotorHandler(object):
         self.kp = 0.5
         self.ki = 1.0
         self.kd = 0.1 * 30 / 1000
+        self.dead_zone = 0
         self.initialized = False
 
         # Setup interupts
@@ -419,9 +421,11 @@ class MotorHandler(object):
     def update_speeds(self, interval, force=False):
         interval_s = interval / 1000
         
+        max_integral = 100.0 / self.ki if self.ki != 0 else 1e9
+
         if self.left_ref_speed != 0:
             left_current_error = self.left_ref_speed - self.left_speed
-            self.left_integration_sum += (left_current_error * interval_s)
+            self.left_integration_sum = max(-max_integral, min(max_integral, self.left_integration_sum + left_current_error * interval_s))
             left_duty = self.kp * left_current_error + self.ki * self.left_integration_sum + self.kd * (left_current_error - self.left_previous_error) / interval_s
             left_duty = int(max(-100, min(100, left_duty)))
             self.left_previous_error = left_current_error
@@ -432,7 +436,7 @@ class MotorHandler(object):
 
         if self.right_ref_speed != 0:
             right_current_error = self.right_ref_speed - self.right_speed
-            self.right_integration_sum += (right_current_error * interval_s)
+            self.right_integration_sum = max(-max_integral, min(max_integral, self.right_integration_sum + right_current_error * interval_s))
             right_duty = self.kp * right_current_error + self.ki * self.right_integration_sum + self.kd * (right_current_error - self.right_previous_error) / interval_s
             right_duty = int(max(-100, min(100, right_duty)))
             self.right_previous_error = right_current_error
@@ -440,14 +444,17 @@ class MotorHandler(object):
             right_duty = 0
             self.right_previous_error = 0
             self.right_integration_sum = 0
-        
+
         if force or left_duty != self.left_duty or right_duty != self.right_duty:
             self.left_duty = left_duty
             self.right_duty = right_duty
 
             self.standby.high()
-            left_duty = int(min(100, abs(self.left_duty)) * 65535/100)
-            self.pwm1.duty_u16(left_duty)
+            abs_left = abs(self.left_duty)
+            if abs_left > 0 and self.dead_zone > 0:
+                abs_left = self.dead_zone + (100 - self.dead_zone) * abs_left // 100
+            left_pwm = int(min(100, abs_left) * 65535 // 100)
+            self.pwm1.duty_u16(left_pwm)
             if self.left_duty > 0:
                 self.cw1.high()
                 self.ccw1.low()
@@ -455,8 +462,11 @@ class MotorHandler(object):
                 self.cw1.low()
                 self.ccw1.high()
 
-            right_duty = int(min(100, abs(self.right_duty)) * 65535/100)
-            self.pwm2.duty_u16(right_duty)
+            abs_right = abs(self.right_duty)
+            if abs_right > 0 and self.dead_zone > 0:
+                abs_right = self.dead_zone + (100 - self.dead_zone) * abs_right // 100
+            right_pwm = int(min(100, abs_right) * 65535 // 100)
+            self.pwm2.duty_u16(right_pwm)
             if self.right_duty > 0:
                 self.cw2.low()
                 self.ccw2.high()
@@ -497,7 +507,6 @@ class MotorHandler(object):
         if interval > MotorHandler.REFRESH_INTERVAL:
             speed = abs(self.left_speed / self.max_rpm + self.right_speed / self.max_rpm) / 2
             ref_speed = abs(self.left_ref_speed / self.max_rpm + self.right_ref_speed / self.max_rpm) / 2
-            ref_speed = speed
             ref_differential_speed = abs(self.left_speed / self.max_rpm - self.right_speed / self.max_rpm) / 2
             # Avoid collision ?
             if self.auto_stop:
@@ -513,11 +522,15 @@ class MotorHandler(object):
                              
                 self.previous_distances = distances
 
-            left_nb_of_steps = self.left_step_counter - self.previous_left_step_counter
-            self.previous_left_step_counter = self.left_step_counter
+            irq_state = disable_irq()
+            left_count = self.left_step_counter
+            right_count = self.right_step_counter
+            enable_irq(irq_state)
+            left_nb_of_steps = left_count - self.previous_left_step_counter
+            self.previous_left_step_counter = left_count
             self.left_speed = int(60000 * left_nb_of_steps / (interval * self.steps_per_rotation))
-            right_nb_of_steps = (self.previous_right_step_counter - self.right_step_counter)
-            self.previous_right_step_counter = self.right_step_counter
+            right_nb_of_steps = self.previous_right_step_counter - right_count
+            self.previous_right_step_counter = right_count
             self.right_speed = int(60000 * right_nb_of_steps / (interval * self.steps_per_rotation))
             avg_nb_of_revolutions = (right_nb_of_steps + left_nb_of_steps) / (2 * self.steps_per_rotation)
             self.total_abs_differential_nb_of_revolutions += abs((left_nb_of_steps - right_nb_of_steps) / self.steps_per_rotation)
@@ -559,6 +572,8 @@ class MotorHandler(object):
                 self.kp = float(args[4])
                 self.ki = float(args[5])
                 self.kd = float(args[6])
+                if len(args) > 7:
+                    self.dead_zone = int(args[7])
                 self.initialized = True
                 return True, "OK"
             elif command == "M":
@@ -826,16 +841,17 @@ def process_command(cmd):
 try:
     buffer = ""
     while True:
-        if uart.txdone():
+        if uart.any():
             data = uart.read()
             if data is not None and len(data) > 0:
                 buffer += data.decode()
                 while len(buffer) > 0:
                     pos = buffer.find("\n")
-                    if pos > 0:
+                    if pos >= 0:
                         command = buffer[:pos]
                         buffer = buffer[pos + 1:]
-                        sensor, success, data = process_command(command)
+                        if command:
+                            sensor, success, data = process_command(command)
                         #print(sensor, success, data)
                     else:
                         break
