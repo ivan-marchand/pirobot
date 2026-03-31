@@ -54,52 +54,61 @@ def _resolve_encoder(config_value: str) -> str:
     raise ValueError(f"Unknown webrtc_h264_encoder value: {config_value!r}")
 
 
-try:
-    _selected_encoder = _resolve_encoder(Config.get("webrtc_h264_encoder"))
-except Exception as exc:
-    logger.warning(f"Could not read webrtc_h264_encoder config ({exc}), using libx264")
-    _selected_encoder = "libx264"
+_selected_encoder: Optional[str] = None
 
 
-if _selected_encoder != "libx264":
-    _MAX_FRAME_RATE = _h264.MAX_FRAME_RATE
+def _get_encoder() -> str:
+    """Return the selected encoder, initializing on first call."""
+    global _selected_encoder
+    if _selected_encoder is not None:
+        return _selected_encoder
 
-    def _patched_encode_frame(self, frame: av.VideoFrame, force_keyframe: bool):
-        if self.codec and (
-            frame.width != self.codec.width
-            or frame.height != self.codec.height
-            or abs(self.target_bitrate - self.codec.bit_rate) / max(1, self.codec.bit_rate) > 0.1
-        ):
-            self.buffer_data = b""
-            self.buffer_pts = None
-            self.codec = None
+    try:
+        _selected_encoder = _resolve_encoder(Config.get("webrtc_h264_encoder"))
+    except Exception as exc:
+        logger.warning(f"Could not read webrtc_h264_encoder config ({exc}), using libx264")
+        _selected_encoder = "libx264"
 
-        if force_keyframe:
-            frame.pict_type = av.video.frame.PictureType.I
-        else:
-            frame.pict_type = av.video.frame.PictureType.NONE
+    if _selected_encoder != "libx264":
+        _MAX_FRAME_RATE = _h264.MAX_FRAME_RATE
 
-        if self.codec is None:
-            self.codec = av.CodecContext.create(_selected_encoder, "w")
-            self.codec.width = frame.width
-            self.codec.height = frame.height
-            self.codec.bit_rate = self.target_bitrate
-            self.codec.pix_fmt = "yuv420p"
-            self.codec.framerate = _fractions.Fraction(_MAX_FRAME_RATE, 1)
-            self.codec.time_base = _fractions.Fraction(1, _MAX_FRAME_RATE)
-            self.codec.options = {"tune": "zerolatency", "level": "31"}
-            self.codec.profile = "Baseline"
+        def _patched_encode_frame(self, frame: av.VideoFrame, force_keyframe: bool):
+            if self.codec and (
+                frame.width != self.codec.width
+                or frame.height != self.codec.height
+                or abs(self.target_bitrate - self.codec.bit_rate) / max(1, self.codec.bit_rate) > 0.1
+            ):
+                self.buffer_data = b""
+                self.buffer_pts = None
+                self.codec = None
 
-        data_to_send = b""
-        for package in self.codec.encode(frame):
-            data_to_send += bytes(package)
+            if force_keyframe:
+                frame.pict_type = av.video.frame.PictureType.I
+            else:
+                frame.pict_type = av.video.frame.PictureType.NONE
 
-        if data_to_send:
-            yield from self._split_bitstream(data_to_send)
+            if self.codec is None:
+                self.codec = av.CodecContext.create(_selected_encoder, "w")
+                self.codec.width = frame.width
+                self.codec.height = frame.height
+                self.codec.bit_rate = self.target_bitrate
+                self.codec.pix_fmt = "yuv420p"
+                self.codec.framerate = _fractions.Fraction(_MAX_FRAME_RATE, 1)
+                self.codec.time_base = _fractions.Fraction(1, _MAX_FRAME_RATE)
+                self.codec.options = {"tune": "zerolatency", "level": "31"}
+                self.codec.profile = "Baseline"
 
-    _h264.H264Encoder._encode_frame = _patched_encode_frame
+            data_to_send = b""
+            for package in self.codec.encode(frame):
+                data_to_send += bytes(package)
 
-logger.info(f"WebRTC H.264 encoder: {_selected_encoder}")
+            if data_to_send:
+                yield from self._split_bitstream(data_to_send)
+
+        _h264.H264Encoder._encode_frame = _patched_encode_frame
+
+    logger.info(f"WebRTC H.264 encoder: {_selected_encoder}")
+    return _selected_encoder
 
 
 class RobotMicTrack(AudioStreamTrack):
@@ -242,6 +251,7 @@ class WebRTCTrack(VideoStreamTrack):
 
     def __init__(self):
         super().__init__()
+        _get_encoder()  # initialize encoder selection (and apply H264 patch) on first use
         self._callback_key = f"webrtc_{uuid.uuid4().hex}"
         self._queue: asyncio.Queue = asyncio.Queue(maxsize=self.QUEUE_SIZE)
         Camera.add_new_streaming_frame_callback(self._callback_key, self.new_frame)

@@ -50,6 +50,7 @@ class Home extends React.Component {
         };
         this.selected_camera = "front"
         this.videoStreamRef = React.createRef();
+        this._ws = null; // synchronous reference — this.state.ws is async (batched setState)
     }
 
 
@@ -74,6 +75,7 @@ class Home extends React.Component {
         ws.onopen = () => {
             console.log("Connected to robot websocket");
 
+            this._ws = ws; // set synchronously so sendWebRTCMessage works immediately
             this.setState({ ws: ws });
 
             that.timeout = 250; // reset timer to 250 on open of websocket connection
@@ -87,6 +89,7 @@ class Home extends React.Component {
 
         // websocket onclose event listener
         ws.onclose = e => {
+            this._ws = null;
             console.log(
                 `Socket is closed. Reconnect will be attempted in ${Math.min(
                     10000 / 1000,
@@ -149,9 +152,9 @@ class Home extends React.Component {
     }
 
     send_json = (json_data) => {
-        this.state.ws.send(
-            JSON.stringify(json_data)
-        );
+        if (this._ws && this._ws.readyState === WebSocket.OPEN) {
+            this._ws.send(JSON.stringify(json_data));
+        }
     }
 
     sendWebRTCMessage = (msg) => {

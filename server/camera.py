@@ -42,8 +42,11 @@ max_y_pos = 42
 
 
 def _open_usb_capture(index):
-    cap = cv2.VideoCapture(index, cv2.CAP_V4L2)
-    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+    if platform.system() == "Linux":
+        cap = cv2.VideoCapture(index, cv2.CAP_V4L2)
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+    else:
+        cap = cv2.VideoCapture(index)
     return cap
 
 
