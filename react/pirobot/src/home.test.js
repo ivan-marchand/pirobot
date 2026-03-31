@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { MemoryRouter } from 'react-router-dom';
 import Home from './home';
@@ -33,4 +33,40 @@ test('control toggle button switches between joystick and d-pad', () => {
   expect(dpadBtn).toBeInTheDocument();
   fireEvent.click(dpadBtn);
   expect(screen.getByRole('button', { name: /use joystick/i })).toBeInTheDocument();
+});
+
+test('mic button is not visible when robot_has_microphone is not set', () => {
+  wrap(<Home />);
+  expect(screen.queryByRole('button', { name: /start talking/i })).not.toBeInTheDocument();
+});
+
+test('mic button is visible when robot_config.robot_has_microphone is true', () => {
+  const ws = new MockWebSocket();
+  global.WebSocket = jest.fn(() => ws);
+  const { unmount } = wrap(<Home />);
+  act(() => {
+    ws.onmessage({ data: JSON.stringify({
+      topic: "status",
+      message: { config: { robot_has_microphone: true }, robot_name: "TestBot", status: {} },
+    })});
+  });
+  expect(screen.getByRole('button', { name: /start talking/i })).toBeInTheDocument();
+  unmount();
+  global.WebSocket = MockWebSocket;
+});
+
+test('mic button toggles to stop talking on click', () => {
+  const ws = new MockWebSocket();
+  global.WebSocket = jest.fn(() => ws);
+  const { unmount } = wrap(<Home />);
+  act(() => {
+    ws.onmessage({ data: JSON.stringify({
+      topic: "status",
+      message: { config: { robot_has_microphone: true }, robot_name: "TestBot", status: {} },
+    })});
+  });
+  fireEvent.click(screen.getByRole('button', { name: /start talking/i }));
+  expect(screen.getByRole('button', { name: /stop talking/i })).toBeInTheDocument();
+  unmount();
+  global.WebSocket = MockWebSocket;
 });

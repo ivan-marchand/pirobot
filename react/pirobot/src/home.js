@@ -18,6 +18,8 @@ import PictureInPictureIcon from '@mui/icons-material/PictureInPicture';
 import SwitchCameraIcon from '@mui/icons-material/SwitchCamera';
 import VerticalAlignCenterIcon from '@mui/icons-material/VerticalAlignCenter';
 import RadarIcon from '@mui/icons-material/Radar';
+import MicIcon from '@mui/icons-material/Mic';
+import MicOffIcon from '@mui/icons-material/MicOff';
 import GamepadIcon from '@mui/icons-material/Gamepad';
 import ControlCameraIcon from '@mui/icons-material/ControlCamera';
 import FlashlightOnIcon from '@mui/icons-material/FlashlightOn';
@@ -44,6 +46,7 @@ class Home extends React.Component {
             control: "joystick",
             control_arm: false,
             drive_slow_mode: false,
+            talking: false,
         };
         this.selected_camera = "front"
         this.videoStreamRef = React.createRef();
@@ -78,7 +81,7 @@ class Home extends React.Component {
 
             // Restart WebRTC now that we have a fresh server connection
             if (this.videoStreamRef.current) {
-                this.videoStreamRef.current._startWebRTC();
+                this.videoStreamRef.current._startWebRTC(this.state.talking);
             }
         };
 
@@ -247,6 +250,10 @@ class Home extends React.Component {
         this.setState({control_arm: !this.state.control_arm});
     }
 
+    toggleTalking = () => {
+        this.setState({ talking: !this.state.talking });
+    }
+
     render() {
         document.body.style.overflow = "hidden";
         return (
@@ -286,6 +293,14 @@ class Home extends React.Component {
                   <Divider orientation="vertical" flexItem/>
                   <Tooltip title="Face Recognition"><IconButton onClick={this.send_action.bind(this, "face_detection", "toggle", {})}>{this.face_detection ? <FaceRetouchingOffIcon/> : <FaceIcon/>}</IconButton></Tooltip>
                   <Tooltip title="Start Patrolling"><IconButton onClick={this.send_action.bind(this, "drive", "patrol", {})}><RadarIcon/></IconButton></Tooltip>
+                  {this.state.robot_config.robot_has_microphone && <Divider orientation="vertical" flexItem/>}
+                  {this.state.robot_config.robot_has_microphone && (
+                      <Tooltip title={this.state.talking ? "Stop talking" : "Start talking"}>
+                          <IconButton onClick={this.toggleTalking}>
+                              {this.state.talking ? <MicOffIcon /> : <MicIcon />}
+                          </IconButton>
+                      </Tooltip>
+                  )}
                 </Box>
 
                 {/* ── BODY ROW: fills remaining height ── */}
@@ -313,6 +328,7 @@ class Home extends React.Component {
                         ref={this.videoStreamRef}
                         updateFps={this.updateFps}
                         sendWebRTCMessage={this.sendWebRTCMessage}
+                        talking={this.state.talking}
                     />
                   </Box>
 
