@@ -22,7 +22,7 @@ try:
     import sounddevice as sd
     _sounddevice_available = True
 except ImportError:
-    logger.warning("sounddevice not available — robot microphone and speaker disabled")
+    logger.debug("sounddevice not available — robot microphone and speaker disabled (Pi only)")
     _sounddevice_available = False
     sd = None
 
