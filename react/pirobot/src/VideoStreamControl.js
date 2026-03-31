@@ -6,37 +6,60 @@ class VideoStreamControl extends React.Component {
     constructor(props) {
         super(props);
         this._pc = null;
+        this._localStream = null;
         this._pendingCandidates = [];
         this._frameCount = 0;
         this._lastFpsTs = 0;
         this._fpsInterval = null;
         this._videoRef = React.createRef();
+        this._audioRef = React.createRef();
+        this._pipRef = React.createRef();
     }
 
     componentDidMount() {
-        this._startWebRTC();
+        this._startWebRTC(this.props.talking || false);
+    }
+
+    componentDidUpdate(prevProps) {
+        if (prevProps.talking !== this.props.talking) {
+            this._startWebRTC(this.props.talking || false);
+        }
     }
 
     componentWillUnmount() {
         this._closeWebRTC();
     }
 
-    _startWebRTC = async () => {
+    _startWebRTC = async (talking = false) => {
         this._closeWebRTC();
         this._pendingCandidates = [];
+
+        if (talking) {
+            try {
+                this._localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+            } catch (err) {
+                console.error("getUserMedia failed:", err);
+                return;
+            }
+        }
 
         const pc = new RTCPeerConnection({ iceServers: [] });
         this._pc = pc;
 
         pc.ontrack = (event) => {
-            if (this._videoRef.current && event.streams[0]) {
-                this._videoRef.current.srcObject = event.streams[0];
-                // Minimize jitter buffer on local network (Chrome 86+, ignored elsewhere)
-                const receiver = pc.getReceivers().find(r => r.track.kind === "video");
-                if (receiver && "jitterBufferTarget" in receiver) {
-                    receiver.jitterBufferTarget = 0;
+            if (event.track.kind === "video") {
+                if (this._videoRef.current) {
+                    this._videoRef.current.srcObject = event.streams[0];
+                    const receiver = pc.getReceivers().find(r => r.track.kind === "video");
+                    if (receiver && "jitterBufferTarget" in receiver) {
+                        receiver.jitterBufferTarget = 0;
+                    }
+                    this._startFpsCounter();
                 }
-                this._startFpsCounter();
+            } else if (event.track.kind === "audio") {
+                if (this._audioRef.current) {
+                    this._audioRef.current.srcObject = event.streams[0];
+                }
             }
         };
 
@@ -51,8 +74,18 @@ class VideoStreamControl extends React.Component {
             }
         };
 
-        // Add a recvonly transceiver so the server knows we want video
         pc.addTransceiver("video", { direction: "recvonly" });
+
+        if (talking && this._localStream) {
+            pc.addTransceiver("audio", { direction: "recvonly" });
+            const audioTrack = this._localStream.getAudioTracks()[0];
+            const videoTrack = this._localStream.getVideoTracks()[0];
+            if (audioTrack) pc.addTransceiver(audioTrack, { direction: "sendonly" });
+            if (videoTrack) pc.addTransceiver(videoTrack, { direction: "sendonly" });
+            if (this._pipRef.current) {
+                this._pipRef.current.srcObject = this._localStream;
+            }
+        }
 
         try {
             const offer = await pc.createOffer();
@@ -61,6 +94,7 @@ class VideoStreamControl extends React.Component {
                 action: "offer",
                 sdp: pc.localDescription.sdp,
                 type: "offer",
+                talking: talking,
             });
         } catch (err) {
             console.error("WebRTC offer failed:", err);
@@ -68,6 +102,10 @@ class VideoStreamControl extends React.Component {
     };
 
     _closeWebRTC = () => {
+        if (this._localStream) {
+            this._localStream.getTracks().forEach(t => t.stop());
+            this._localStream = null;
+        }
         if (this._pc) {
             this._pc.close();
             this._pc = null;
@@ -129,7 +167,6 @@ class VideoStreamControl extends React.Component {
             };
             video.requestVideoFrameCallback(onFrame);
         } else {
-            // Safari fallback: poll with setInterval
             this._fpsInterval = setInterval(() => {
                 if (video.readyState >= 2) {
                     this._frameCount++;
@@ -142,7 +179,7 @@ class VideoStreamControl extends React.Component {
                         this._lastFpsTs = now;
                     }
                 }
-            }, 33); // ~30 fps poll
+            }, 33);
         }
     };
 
@@ -155,13 +192,34 @@ class VideoStreamControl extends React.Component {
 
     render() {
         return (
-            <video
-                ref={this._videoRef}
-                autoPlay
-                playsInline
-                muted
-                style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
-            />
+            <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                <video
+                    ref={this._videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+                />
+                <audio ref={this._audioRef} autoPlay style={{ display: "none" }} />
+                {this.props.talking && (
+                    <video
+                        ref={this._pipRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        style={{
+                            position: "absolute",
+                            bottom: 8,
+                            right: 8,
+                            width: 120,
+                            height: 90,
+                            objectFit: "cover",
+                            borderRadius: 4,
+                            border: "2px solid white",
+                        }}
+                    />
+                )}
+            </div>
         );
     }
 }
