@@ -35,11 +35,14 @@ class VideoStreamControl extends React.Component {
         this._pendingCandidates = [];
 
         if (talking) {
-            try {
-                this._localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-            } catch (err) {
-                console.error("getUserMedia failed:", err);
-                return;
+            if (!navigator.mediaDevices) {
+                console.warn("getUserMedia unavailable (requires HTTPS or localhost)");
+            } else {
+                try {
+                    this._localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+                } catch (err) {
+                    console.error("getUserMedia failed:", err);
+                }
             }
         }
 
@@ -50,6 +53,7 @@ class VideoStreamControl extends React.Component {
             if (event.track.kind === "video") {
                 if (this._videoRef.current) {
                     this._videoRef.current.srcObject = event.streams[0];
+                    this._videoRef.current.play().catch(() => {});
                     const receiver = pc.getReceivers().find(r => r.track.kind === "video");
                     if (receiver && "jitterBufferTarget" in receiver) {
                         receiver.jitterBufferTarget = 0;
@@ -109,6 +113,12 @@ class VideoStreamControl extends React.Component {
         if (this._pc) {
             this._pc.close();
             this._pc = null;
+        }
+        if (this._videoRef.current) {
+            this._videoRef.current.srcObject = null;
+        }
+        if (this._audioRef.current) {
+            this._audioRef.current.srcObject = null;
         }
         this._pendingCandidates = [];
         this._stopFpsCounter();

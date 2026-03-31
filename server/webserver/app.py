@@ -234,5 +234,7 @@ app.add_routes(
 
 
 async def run_webserver(server):
+    from ssl_cert import get_ssl_context
     context.robot_server = server
-    await web._run_app(app, port=Config.get_webserver_port())
+    ssl_ctx = get_ssl_context()
+    await web._run_app(app, port=Config.get_webserver_port(), ssl_context=ssl_ctx)
