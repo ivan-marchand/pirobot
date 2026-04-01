@@ -185,12 +185,17 @@ class BrowserAudioPlayer:
     async def _play(self, track) -> None:
         stream = None
         try:
-            stream = sd.OutputStream(samplerate=48000, channels=1, dtype="int16")
+            stream = sd.OutputStream(samplerate=48000, channels=1, dtype="int16", latency="high")
             stream.start()
             while True:
                 frame = await track.recv()
-                pcm = frame.to_ndarray().flatten().astype(np.int16)
-                stream.write(pcm)
+                arr = frame.to_ndarray()
+                # Mix to mono if stereo (arr shape is (channels, samples))
+                if arr.ndim > 1 and arr.shape[0] > 1:
+                    pcm = arr.mean(axis=0).astype(np.int16)
+                else:
+                    pcm = arr.flatten().astype(np.int16)
+                await asyncio.to_thread(stream.write, pcm)
         except asyncio.CancelledError:
             pass
         except Exception as exc:
