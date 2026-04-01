@@ -181,38 +181,20 @@ class BrowserAudioPlayer:
     avoiding the underruns and mmap errors caused by pushing on WebRTC frame arrival.
     """
 
-    _BLOCK_SAMPLES = 960  # 20 ms at 48 kHz
-    _MAX_QUEUE_DEPTH = 4  # ~160 ms max queue (frames are ~40 ms each)
+    _BLOCK_SAMPLES = 1920  # 40 ms at 48 kHz — matches Opus frame size exactly
+    _MAX_QUEUE_DEPTH = 4   # ~160 ms max queue
 
     def __init__(self):
         self._task: Optional[asyncio.Task] = None
         self._queue: _queue.SimpleQueue = _queue.SimpleQueue()
-        self._leftover: Optional[np.ndarray] = None
         self._stream: Optional[sd.OutputStream] = None
 
     def _callback(self, outdata: np.ndarray, frames: int, time, status) -> None:
         """Called by sounddevice in a dedicated audio thread."""
-        buf = np.zeros(frames, dtype=np.int16)
-        pos = 0
-
-        if self._leftover is not None:
-            n = min(len(self._leftover), frames)
-            buf[:n] = self._leftover[:n]
-            pos = n
-            self._leftover = self._leftover[n:] if n < len(self._leftover) else None
-
-        while pos < frames:
-            try:
-                chunk = self._queue.get_nowait()
-            except _queue.Empty:
-                break  # output silence for remaining frames
-            n = min(len(chunk), frames - pos)
-            buf[pos:pos + n] = chunk[:n]
-            pos += n
-            if n < len(chunk):
-                self._leftover = chunk[n:]
-
-        outdata[:, 0] = buf
+        try:
+            outdata[:, 0] = self._queue.get_nowait()
+        except _queue.Empty:
+            outdata[:, 0] = 0
 
     def start(self, track) -> None:
         self._leftover = None
@@ -241,9 +223,8 @@ class BrowserAudioPlayer:
             while True:
                 try:
                     frame = await track.recv()
-                    arr = frame.to_ndarray(format="s16p")  # shape: (channels, samples), int16
-                    # Mix to mono: average channels, keep as int16
-                    pcm = arr.mean(axis=0).astype(np.int16)
+                    arr = frame.to_ndarray()  # native s16, shape (1, samples) for mono
+                    pcm = arr[0]              # shape (samples,), int16 — no conversion needed
                     self._queue.put_nowait(pcm)
                     # Drop oldest frames if falling behind
                     while self._queue.qsize() > self._MAX_QUEUE_DEPTH:
