@@ -290,7 +290,14 @@ class BrowserAudioPlayer:
 
 
 class BrowserVideoReceiver:
-    """Forwards incoming browser webcam frames to the LCD handler."""
+    """Forwards incoming browser webcam frames to the LCD handler.
+
+    LCD updates are rate-limited and offloaded to a thread — SPI writes are
+    blocking and take ~50-100ms; running them on the event loop would stall
+    everything else.
+    """
+
+    _LCD_FPS = 5  # SPI bus can't sustain more than ~5-10 FPS at 240x320
 
     def __init__(self):
         self._task: Optional[asyncio.Task] = None
@@ -299,14 +306,21 @@ class BrowserVideoReceiver:
         self._task = asyncio.ensure_future(self._receive(track))
 
     async def _receive(self, track) -> None:
+        loop = asyncio.get_running_loop()
+        frame_interval = 1.0 / self._LCD_FPS
+        last_lcd_update = 0.0
         try:
             while True:
                 try:
                     frame = await track.recv()
+                    now = loop.time()
+                    if now - last_lcd_update < frame_interval:
+                        continue
                     lcd = BaseHandler.get_handler("lcd")
                     if lcd is not None and lcd.eligible:
                         img = frame.to_ndarray(format="rgb24")
-                        lcd.display_frame(img)
+                        await asyncio.to_thread(lcd.display_frame, img)
+                        last_lcd_update = loop.time()
                 except asyncio.CancelledError:
                     raise
                 except MediaStreamError:
