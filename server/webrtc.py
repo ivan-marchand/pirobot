@@ -2,7 +2,6 @@ import asyncio
 import fractions as _fractions
 import logging
 import platform
-import queue as _queue
 import uuid
 from typing import Optional
 
@@ -175,81 +174,34 @@ class RobotMicTrack(AudioStreamTrack):
 
 
 class BrowserAudioPlayer:
-    """Plays incoming browser audio frames through the Pi speaker via sounddevice.
+    """Plays incoming browser audio frames by piping raw PCM to aplay.
 
-    Uses a callback-based OutputStream so ALSA pulls data on its own schedule,
-    avoiding the underruns and mmap errors caused by pushing on WebRTC frame arrival.
+    Bypasses sounddevice/PortAudio entirely — aplay handles buffering and
+    ALSA device access in its own process, completely off the event loop.
     """
-
-    _BLOCK_SAMPLES = 960  # 20 ms at 48 kHz
-    _MAX_QUEUE_DEPTH = 6  # ~240 ms max queue (frames are ~40 ms each)
 
     def __init__(self):
         self._task: Optional[asyncio.Task] = None
-        self._queue: _queue.SimpleQueue = _queue.SimpleQueue()
-        self._leftover: Optional[np.ndarray] = None
-        self._stream: Optional[sd.OutputStream] = None
-
-    def _callback(self, outdata: np.ndarray, frames: int, time, status) -> None:
-        """Called by sounddevice in a dedicated audio thread."""
-        buf = np.zeros(frames, dtype=np.int16)
-        pos = 0
-
-        if self._leftover is not None:
-            n = min(len(self._leftover), frames)
-            buf[:n] = self._leftover[:n]
-            pos = n
-            self._leftover = self._leftover[n:] if n < len(self._leftover) else None
-
-        while pos < frames:
-            try:
-                chunk = self._queue.get_nowait()
-            except _queue.Empty:
-                break
-            n = min(len(chunk), frames - pos)
-            buf[pos:pos + n] = chunk[:n]
-            pos += n
-            if n < len(chunk):
-                self._leftover = chunk[n:]
-
-        outdata[:, 0] = buf
 
     def start(self, track) -> None:
-        self._leftover = None
-        device = Config.get("audio_output_device")
-        if device == -1:
-            device = None  # let sounddevice use system default
-        try:
-            self._stream = sd.OutputStream(
-                samplerate=48000,
-                channels=1,
-                dtype="int16",
-                blocksize=self._BLOCK_SAMPLES,
-                latency=0.2,
-                callback=self._callback,
-                device=device,
-            )
-            self._stream.start()
-            logger.info(f"BrowserAudioPlayer: started on device {self._stream.device}")
-        except Exception as exc:
-            logger.error(f"BrowserAudioPlayer: failed to open OutputStream: {exc}", exc_info=True)
-            return
         self._task = asyncio.ensure_future(self._receive(track))
 
     async def _receive(self, track) -> None:
+        proc = None
         try:
+            proc = await asyncio.create_subprocess_exec(
+                "aplay", "-f", "S16_LE", "-r", "48000", "-c", "1", "-t", "raw",
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            logger.info("BrowserAudioPlayer: aplay started")
             while True:
                 try:
                     frame = await track.recv()
-                    arr = frame.to_ndarray()  # native s16
-                    pcm = arr.flatten()       # (samples,) int16, works for any shape
-                    self._queue.put_nowait(pcm)
-                    # Drop oldest frames if falling behind
-                    while self._queue.qsize() > self._MAX_QUEUE_DEPTH:
-                        try:
-                            self._queue.get_nowait()
-                        except _queue.Empty:
-                            break
+                    pcm_bytes = frame.to_ndarray().flatten().astype(np.int16).tobytes()
+                    proc.stdin.write(pcm_bytes)
+                    await proc.stdin.drain()
                 except asyncio.CancelledError:
                     raise
                 except MediaStreamError:
@@ -258,14 +210,19 @@ class BrowserAudioPlayer:
                     logger.warning(f"BrowserAudioPlayer frame error: {type(exc).__name__}: {exc}")
         except asyncio.CancelledError:
             pass
+        except Exception as exc:
+            logger.error(f"BrowserAudioPlayer: failed to start aplay: {exc}")
         finally:
-            if self._stream is not None:
+            if proc is not None:
                 try:
-                    self._stream.stop()
-                    self._stream.close()
+                    proc.stdin.close()
                 except Exception:
                     pass
-                self._stream = None
+                try:
+                    proc.terminate()
+                    await asyncio.wait_for(proc.wait(), timeout=2.0)
+                except Exception:
+                    pass
 
     def stop(self) -> None:
         if self._task is not None:
