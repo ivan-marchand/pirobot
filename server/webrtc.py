@@ -186,27 +186,44 @@ class BrowserAudioPlayer:
     def start(self, track) -> None:
         self._task = asyncio.ensure_future(self._receive(track))
 
-    # Drop frames if the pipe buffer exceeds this — prevents lag buildup
-    _MAX_PIPE_BYTES = 4 * 1920 * 2  # ~160 ms (4 frames × 1920 samples × 2 bytes)
+    _SAMPLE_RATE = 48000
+    _BYTES_PER_SEC = _SAMPLE_RATE * 2  # 16-bit mono = 96000 bytes/sec
+    _APLAY_BUFFER_SEC = 0.2            # -B 200000 = 200 ms ALSA pre-buffer
+    _MAX_AHEAD_SEC = 0.3               # drop frames if >300 ms ahead of playback clock
 
     async def _receive(self, track) -> None:
+        import time
         proc = None
         try:
             proc = await asyncio.create_subprocess_exec(
                 "aplay", "-f", "S16_LE", "-r", "48000", "-c", "1", "-t", "raw",
-                "-B", "200000",  # 200 ms ALSA buffer
+                "-B", "200000",
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
             )
             logger.info("BrowserAudioPlayer: aplay started")
+            start_time: Optional[float] = None
+            bytes_written = 0
             while True:
                 try:
                     frame = await track.recv()
                     pcm_bytes = frame.to_ndarray().flatten().astype(np.int16).tobytes()
-                    if proc.stdin.transport.get_write_buffer_size() > self._MAX_PIPE_BYTES:
-                        continue  # drop — we're behind, prevent lag buildup
+
+                    now = time.monotonic()
+                    if start_time is None:
+                        start_time = now
+
+                    # Estimate bytes aplay has consumed (wall-clock minus initial buffer fill)
+                    elapsed = now - start_time
+                    bytes_played = max(0.0, elapsed - self._APLAY_BUFFER_SEC) * self._BYTES_PER_SEC
+                    buffer_depth_sec = (bytes_written - bytes_played) / self._BYTES_PER_SEC
+
+                    if buffer_depth_sec > self._MAX_AHEAD_SEC:
+                        continue  # drop — we're ahead of playback, prevent lag buildup
+
                     proc.stdin.write(pcm_bytes)
+                    bytes_written += len(pcm_bytes)
                 except asyncio.CancelledError:
                     raise
                 except MediaStreamError:
