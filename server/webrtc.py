@@ -182,22 +182,16 @@ class BrowserAudioPlayer:
     """
 
     _BLOCK_SAMPLES = 960  # 20 ms at 48 kHz
-    _MAX_QUEUE_DEPTH = 2  # ~80 ms max queue (frames are ~40 ms each)
+    _MAX_QUEUE_DEPTH = 4  # ~160 ms max queue (frames are ~40 ms each)
 
     def __init__(self):
         self._task: Optional[asyncio.Task] = None
         self._queue: _queue.SimpleQueue = _queue.SimpleQueue()
         self._leftover: Optional[np.ndarray] = None
         self._stream: Optional[sd.OutputStream] = None
-        self._callback_count = 0
 
     def _callback(self, outdata: np.ndarray, frames: int, time, status) -> None:
         """Called by sounddevice in a dedicated audio thread."""
-        self._callback_count += 1
-        if self._callback_count == 1:
-            logger.info(f"BrowserAudioPlayer: first callback (frames={frames})")
-        elif self._callback_count == 50:
-            logger.info(f"BrowserAudioPlayer: 50 callbacks fired — audio pipeline alive")
         buf = np.zeros(frames, dtype=np.int16)
         pos = 0
 
@@ -225,41 +219,33 @@ class BrowserAudioPlayer:
         device = Config.get("audio_output_device")
         if device == -1:
             device = None  # let sounddevice use system default
-        logger.info(f"BrowserAudioPlayer: opening output on device={device} (system default={sd.default.device})")
         try:
             self._stream = sd.OutputStream(
                 samplerate=48000,
                 channels=1,
                 dtype="int16",
                 blocksize=self._BLOCK_SAMPLES,
-                latency=0.05,
+                latency=0.1,
                 callback=self._callback,
                 device=device,
             )
             self._stream.start()
-            logger.info(f"BrowserAudioPlayer: OutputStream started on device index {self._stream.device}")
+            logger.info(f"BrowserAudioPlayer: started on device {self._stream.device}")
         except Exception as exc:
             logger.error(f"BrowserAudioPlayer: failed to open OutputStream: {exc}", exc_info=True)
             return
         self._task = asyncio.ensure_future(self._receive(track))
 
     async def _receive(self, track) -> None:
-        frame_count = 0
         try:
             while True:
                 try:
                     frame = await track.recv()
-                    arr = frame.to_ndarray(format="s16p")  # (channels, samples), int16
+                    arr = frame.to_ndarray(format="s16p")  # shape: (channels, samples), int16
+                    # Mix to mono: average channels, keep as int16
                     pcm = arr.mean(axis=0).astype(np.int16)
                     self._queue.put_nowait(pcm)
-                    frame_count += 1
-                    if frame_count == 1:
-                        logger.info(f"BrowserAudioPlayer: first audio frame received "
-                                    f"(channels={arr.shape[0]}, samples={arr.shape[1]}, "
-                                    f"format={frame.format.name}, sample_rate={frame.sample_rate})")
-                    elif frame_count % 100 == 0:
-                        logger.debug(f"BrowserAudioPlayer: {frame_count} frames received, queue depth={self._queue.qsize()}")
-                    # Drop oldest frames if we're falling behind
+                    # Drop oldest frames if falling behind
                     while self._queue.qsize() > self._MAX_QUEUE_DEPTH:
                         try:
                             self._queue.get_nowait()
@@ -268,7 +254,6 @@ class BrowserAudioPlayer:
                 except asyncio.CancelledError:
                     raise
                 except MediaStreamError:
-                    logger.info(f"BrowserAudioPlayer: track ended after {frame_count} frames")
                     break
                 except Exception as exc:
                     logger.warning(f"BrowserAudioPlayer frame error: {type(exc).__name__}: {exc}")
