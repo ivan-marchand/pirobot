@@ -41,7 +41,7 @@ class VideoStreamControl extends React.Component {
                 try {
                     this._localStream = await navigator.mediaDevices.getUserMedia({
                         audio: true,
-                        video: { width: { ideal: 240 }, height: { ideal: 180 } },
+                        video: { width: { max: 320 }, height: { max: 240 } },
                     });
                 } catch (err) {
                     console.error("getUserMedia failed:", err);
