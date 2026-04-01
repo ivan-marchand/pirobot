@@ -181,8 +181,8 @@ class BrowserAudioPlayer:
     avoiding the underruns and mmap errors caused by pushing on WebRTC frame arrival.
     """
 
-    _BLOCK_SAMPLES = 960   # 20 ms at 48 kHz — matches Opus frame size
-    _MAX_QUEUE_DEPTH = 25  # ~500 ms of buffer before we start dropping
+    _BLOCK_SAMPLES = 960  # 20 ms at 48 kHz
+    _MAX_QUEUE_DEPTH = 4  # ~160 ms of buffer before we start dropping (frames are 40 ms each)
 
     def __init__(self):
         self._task: Optional[asyncio.Task] = None
@@ -232,7 +232,7 @@ class BrowserAudioPlayer:
                 channels=1,
                 dtype="int16",
                 blocksize=self._BLOCK_SAMPLES,
-                latency="high",
+                latency=0.1,
                 callback=self._callback,
                 device=device,
             )

@@ -1,3 +1,8 @@
 {
-  "include": "default.robot.json"
+  "include": "default.robot.json",
+  "config": {
+    "audio_output_device": {
+      "value": 0
+    }
+  }
 }
