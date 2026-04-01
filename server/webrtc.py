@@ -192,7 +192,11 @@ class BrowserAudioPlayer:
     def _callback(self, outdata: np.ndarray, frames: int, time, status) -> None:
         """Called by sounddevice in a dedicated audio thread."""
         try:
-            outdata[:, 0] = self._queue.get_nowait()
+            chunk = self._queue.get_nowait()
+            n = min(len(chunk), frames)
+            outdata[:n, 0] = chunk[:n]
+            if n < frames:
+                outdata[n:, 0] = 0
         except _queue.Empty:
             outdata[:, 0] = 0
 
@@ -223,8 +227,8 @@ class BrowserAudioPlayer:
             while True:
                 try:
                     frame = await track.recv()
-                    arr = frame.to_ndarray()  # native s16, shape (1, samples) for mono
-                    pcm = arr[0]              # shape (samples,), int16 — no conversion needed
+                    arr = frame.to_ndarray()  # native s16
+                    pcm = arr.flatten()       # (samples,) int16, works for any shape
                     self._queue.put_nowait(pcm)
                     # Drop oldest frames if falling behind
                     while self._queue.qsize() > self._MAX_QUEUE_DEPTH:
