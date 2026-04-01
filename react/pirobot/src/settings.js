@@ -37,7 +37,7 @@ class Settings extends React.Component {
      */
     connect = (onopen_callback) => {
         console.log("Connecting to robot websocket");
-        let ws_url = "ws://" + (window.location.port === "3000" ? "localhost:8080" : window.location.host) + "/ws/robot";
+        let ws_url = "wss://" + (window.location.port === "3000" ? "localhost:8080" : window.location.host) + "/ws/robot";
 
         var ws = new WebSocket(ws_url);
         let that = this; // cache the this
