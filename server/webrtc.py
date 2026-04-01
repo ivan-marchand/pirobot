@@ -182,7 +182,7 @@ class BrowserAudioPlayer:
     """
 
     _BLOCK_SAMPLES = 960  # 20 ms at 48 kHz
-    _MAX_QUEUE_DEPTH = 4  # ~160 ms of buffer before we start dropping (frames are 40 ms each)
+    _MAX_QUEUE_DEPTH = 2  # ~80 ms max queue (frames are ~40 ms each)
 
     def __init__(self):
         self._task: Optional[asyncio.Task] = None
@@ -232,7 +232,7 @@ class BrowserAudioPlayer:
                 channels=1,
                 dtype="int16",
                 blocksize=self._BLOCK_SAMPLES,
-                latency=0.1,
+                latency=0.05,
                 callback=self._callback,
                 device=device,
             )

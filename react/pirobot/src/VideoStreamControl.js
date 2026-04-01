@@ -198,6 +198,9 @@ class VideoStreamControl extends React.Component {
             clearInterval(this._fpsInterval);
             this._fpsInterval = null;
         }
+        this._frameCount = 0;
+        this._lastFpsTs = 0;
+        this.props.updateFps(0);
     };
 
     render() {
