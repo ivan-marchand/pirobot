@@ -189,9 +189,15 @@ class BrowserAudioPlayer:
         self._queue: _queue.SimpleQueue = _queue.SimpleQueue()
         self._leftover: Optional[np.ndarray] = None
         self._stream: Optional[sd.OutputStream] = None
+        self._callback_count = 0
 
     def _callback(self, outdata: np.ndarray, frames: int, time, status) -> None:
         """Called by sounddevice in a dedicated audio thread."""
+        self._callback_count += 1
+        if self._callback_count == 1:
+            logger.info(f"BrowserAudioPlayer: first callback (frames={frames})")
+        elif self._callback_count == 50:
+            logger.info(f"BrowserAudioPlayer: 50 callbacks fired — audio pipeline alive")
         buf = np.zeros(frames, dtype=np.int16)
         pos = 0
 
@@ -216,7 +222,8 @@ class BrowserAudioPlayer:
 
     def start(self, track) -> None:
         self._leftover = None
-        logger.info(f"BrowserAudioPlayer: opening OutputStream (device={sd.default.device})")
+        logger.info(f"BrowserAudioPlayer: default device={sd.default.device}")
+        logger.info(f"BrowserAudioPlayer: available devices:\n{sd.query_devices()}")
         try:
             self._stream = sd.OutputStream(
                 samplerate=48000,
@@ -227,7 +234,7 @@ class BrowserAudioPlayer:
                 callback=self._callback,
             )
             self._stream.start()
-            logger.info("BrowserAudioPlayer: OutputStream started")
+            logger.info(f"BrowserAudioPlayer: OutputStream started on '{self._stream.device}'")
         except Exception as exc:
             logger.error(f"BrowserAudioPlayer: failed to open OutputStream: {exc}", exc_info=True)
             return
