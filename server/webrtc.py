@@ -235,7 +235,7 @@ class BrowserVideoReceiver:
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
-                    logger.warning(f"BrowserVideoReceiver frame error: {exc}")
+                    logger.warning(f"BrowserVideoReceiver frame error: {type(exc).__name__}: {exc}", exc_info=True)
         except asyncio.CancelledError:
             pass
         finally:
