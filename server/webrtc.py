@@ -216,18 +216,25 @@ class BrowserAudioPlayer:
 
     def start(self, track) -> None:
         self._leftover = None
-        self._stream = sd.OutputStream(
-            samplerate=48000,
-            channels=1,
-            dtype="int16",
-            blocksize=self._BLOCK_SAMPLES,
-            latency="high",
-            callback=self._callback,
-        )
-        self._stream.start()
+        logger.info(f"BrowserAudioPlayer: opening OutputStream (device={sd.default.device})")
+        try:
+            self._stream = sd.OutputStream(
+                samplerate=48000,
+                channels=1,
+                dtype="int16",
+                blocksize=self._BLOCK_SAMPLES,
+                latency="high",
+                callback=self._callback,
+            )
+            self._stream.start()
+            logger.info("BrowserAudioPlayer: OutputStream started")
+        except Exception as exc:
+            logger.error(f"BrowserAudioPlayer: failed to open OutputStream: {exc}", exc_info=True)
+            return
         self._task = asyncio.ensure_future(self._receive(track))
 
     async def _receive(self, track) -> None:
+        frame_count = 0
         try:
             while True:
                 try:
@@ -235,6 +242,13 @@ class BrowserAudioPlayer:
                     arr = frame.to_ndarray(format="s16p")  # (channels, samples), int16
                     pcm = arr.mean(axis=0).astype(np.int16)
                     self._queue.put_nowait(pcm)
+                    frame_count += 1
+                    if frame_count == 1:
+                        logger.info(f"BrowserAudioPlayer: first audio frame received "
+                                    f"(channels={arr.shape[0]}, samples={arr.shape[1]}, "
+                                    f"format={frame.format.name}, sample_rate={frame.sample_rate})")
+                    elif frame_count % 100 == 0:
+                        logger.debug(f"BrowserAudioPlayer: {frame_count} frames received, queue depth={self._queue.qsize()}")
                     # Drop oldest frames if we're falling behind
                     while self._queue.qsize() > self._MAX_QUEUE_DEPTH:
                         try:
@@ -244,6 +258,7 @@ class BrowserAudioPlayer:
                 except asyncio.CancelledError:
                     raise
                 except MediaStreamError:
+                    logger.info(f"BrowserAudioPlayer: track ended after {frame_count} frames")
                     break
                 except Exception as exc:
                     logger.warning(f"BrowserAudioPlayer frame error: {type(exc).__name__}: {exc}")
