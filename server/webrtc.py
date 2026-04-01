@@ -2,6 +2,7 @@ import asyncio
 import fractions as _fractions
 import logging
 import platform
+import queue as _queue
 import uuid
 from typing import Optional
 
@@ -174,27 +175,72 @@ class RobotMicTrack(AudioStreamTrack):
 
 
 class BrowserAudioPlayer:
-    """Plays incoming browser audio frames through the Pi speaker via sounddevice."""
+    """Plays incoming browser audio frames through the Pi speaker via sounddevice.
+
+    Uses a callback-based OutputStream so ALSA pulls data on its own schedule,
+    avoiding the underruns and mmap errors caused by pushing on WebRTC frame arrival.
+    """
+
+    _BLOCK_SAMPLES = 960   # 20 ms at 48 kHz — matches Opus frame size
+    _MAX_QUEUE_DEPTH = 25  # ~500 ms of buffer before we start dropping
 
     def __init__(self):
         self._task: Optional[asyncio.Task] = None
+        self._queue: _queue.SimpleQueue = _queue.SimpleQueue()
+        self._leftover: Optional[np.ndarray] = None
+        self._stream: Optional[sd.OutputStream] = None
+
+    def _callback(self, outdata: np.ndarray, frames: int, time, status) -> None:
+        """Called by sounddevice in a dedicated audio thread."""
+        buf = np.zeros(frames, dtype=np.int16)
+        pos = 0
+
+        if self._leftover is not None:
+            n = min(len(self._leftover), frames)
+            buf[:n] = self._leftover[:n]
+            pos = n
+            self._leftover = self._leftover[n:] if n < len(self._leftover) else None
+
+        while pos < frames:
+            try:
+                chunk = self._queue.get_nowait()
+            except _queue.Empty:
+                break  # output silence for remaining frames
+            n = min(len(chunk), frames - pos)
+            buf[pos:pos + n] = chunk[:n]
+            pos += n
+            if n < len(chunk):
+                self._leftover = chunk[n:]
+
+        outdata[:, 0] = buf
 
     def start(self, track) -> None:
-        self._task = asyncio.ensure_future(self._play(track))
+        self._leftover = None
+        self._stream = sd.OutputStream(
+            samplerate=48000,
+            channels=1,
+            dtype="int16",
+            blocksize=self._BLOCK_SAMPLES,
+            latency="high",
+            callback=self._callback,
+        )
+        self._stream.start()
+        self._task = asyncio.ensure_future(self._receive(track))
 
-    async def _play(self, track) -> None:
-        stream = None
+    async def _receive(self, track) -> None:
         try:
-            stream = sd.OutputStream(samplerate=48000, channels=1, dtype="int16", latency="high")
-            stream.start()
             while True:
                 try:
                     frame = await track.recv()
-                    # Request s16p (signed 16-bit planar) so we always get int16
-                    # regardless of whether Opus decoded to fltp or s16p
-                    arr = frame.to_ndarray(format="s16p")  # shape: (channels, samples)
-                    pcm = arr.mean(axis=0).astype(np.int16)  # mix to mono
-                    await asyncio.to_thread(stream.write, pcm)
+                    arr = frame.to_ndarray(format="s16p")  # (channels, samples), int16
+                    pcm = arr.mean(axis=0).astype(np.int16)
+                    self._queue.put_nowait(pcm)
+                    # Drop oldest frames if we're falling behind
+                    while self._queue.qsize() > self._MAX_QUEUE_DEPTH:
+                        try:
+                            self._queue.get_nowait()
+                        except _queue.Empty:
+                            break
                 except asyncio.CancelledError:
                     raise
                 except MediaStreamError:
@@ -204,12 +250,13 @@ class BrowserAudioPlayer:
         except asyncio.CancelledError:
             pass
         finally:
-            if stream is not None:
+            if self._stream is not None:
                 try:
-                    stream.stop()
-                    stream.close()
+                    self._stream.stop()
+                    self._stream.close()
                 except Exception:
                     pass
+                self._stream = None
 
     def stop(self) -> None:
         if self._task is not None:
