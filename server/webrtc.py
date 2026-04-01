@@ -181,24 +181,38 @@ class BrowserAudioPlayer:
     avoiding the underruns and mmap errors caused by pushing on WebRTC frame arrival.
     """
 
-    _BLOCK_SAMPLES = 1920  # 40 ms at 48 kHz — matches Opus frame size exactly
-    _MAX_QUEUE_DEPTH = 4   # ~160 ms max queue
+    _BLOCK_SAMPLES = 960  # 20 ms at 48 kHz
+    _MAX_QUEUE_DEPTH = 6  # ~240 ms max queue (frames are ~40 ms each)
 
     def __init__(self):
         self._task: Optional[asyncio.Task] = None
         self._queue: _queue.SimpleQueue = _queue.SimpleQueue()
+        self._leftover: Optional[np.ndarray] = None
         self._stream: Optional[sd.OutputStream] = None
 
     def _callback(self, outdata: np.ndarray, frames: int, time, status) -> None:
         """Called by sounddevice in a dedicated audio thread."""
-        try:
-            chunk = self._queue.get_nowait()
-            n = min(len(chunk), frames)
-            outdata[:n, 0] = chunk[:n]
-            if n < frames:
-                outdata[n:, 0] = 0
-        except _queue.Empty:
-            outdata[:, 0] = 0
+        buf = np.zeros(frames, dtype=np.int16)
+        pos = 0
+
+        if self._leftover is not None:
+            n = min(len(self._leftover), frames)
+            buf[:n] = self._leftover[:n]
+            pos = n
+            self._leftover = self._leftover[n:] if n < len(self._leftover) else None
+
+        while pos < frames:
+            try:
+                chunk = self._queue.get_nowait()
+            except _queue.Empty:
+                break
+            n = min(len(chunk), frames - pos)
+            buf[pos:pos + n] = chunk[:n]
+            pos += n
+            if n < len(chunk):
+                self._leftover = chunk[n:]
+
+        outdata[:, 0] = buf
 
     def start(self, track) -> None:
         self._leftover = None
@@ -211,7 +225,7 @@ class BrowserAudioPlayer:
                 channels=1,
                 dtype="int16",
                 blocksize=self._BLOCK_SAMPLES,
-                latency=0.1,
+                latency=0.2,
                 callback=self._callback,
                 device=device,
             )
