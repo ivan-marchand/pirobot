@@ -186,11 +186,15 @@ class BrowserAudioPlayer:
     def start(self, track) -> None:
         self._task = asyncio.ensure_future(self._receive(track))
 
+    # Drop frames if the pipe buffer exceeds this — prevents lag buildup
+    _MAX_PIPE_BYTES = 4 * 1920 * 2  # ~160 ms (4 frames × 1920 samples × 2 bytes)
+
     async def _receive(self, track) -> None:
         proc = None
         try:
             proc = await asyncio.create_subprocess_exec(
                 "aplay", "-f", "S16_LE", "-r", "48000", "-c", "1", "-t", "raw",
+                "-B", "200000",  # 200 ms ALSA buffer
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
@@ -200,8 +204,9 @@ class BrowserAudioPlayer:
                 try:
                     frame = await track.recv()
                     pcm_bytes = frame.to_ndarray().flatten().astype(np.int16).tobytes()
+                    if proc.stdin.transport.get_write_buffer_size() > self._MAX_PIPE_BYTES:
+                        continue  # drop — we're behind, prevent lag buildup
                     proc.stdin.write(pcm_bytes)
-                    await proc.stdin.drain()
                 except asyncio.CancelledError:
                     raise
                 except MediaStreamError:
