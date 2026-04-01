@@ -226,15 +226,18 @@ class BrowserVideoReceiver:
     async def _receive(self, track) -> None:
         try:
             while True:
-                frame = await track.recv()
-                lcd = BaseHandler.get_handler("lcd")
-                if lcd is not None and lcd.eligible:
-                    img = frame.to_ndarray(format="rgb24")
-                    lcd.display_frame(img)
+                try:
+                    frame = await track.recv()
+                    lcd = BaseHandler.get_handler("lcd")
+                    if lcd is not None and lcd.eligible:
+                        img = frame.to_ndarray(format="rgb24")
+                        lcd.display_frame(img)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    logger.warning(f"BrowserVideoReceiver frame error: {exc}")
         except asyncio.CancelledError:
             pass
-        except Exception as exc:
-            logger.warning(f"BrowserVideoReceiver error: {exc}")
         finally:
             lcd = BaseHandler.get_handler("lcd")
             if lcd is not None and lcd.eligible:
