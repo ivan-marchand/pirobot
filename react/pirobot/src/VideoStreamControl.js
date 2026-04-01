@@ -39,7 +39,10 @@ class VideoStreamControl extends React.Component {
                 console.warn("getUserMedia unavailable (requires HTTPS or localhost)");
             } else {
                 try {
-                    this._localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+                    this._localStream = await navigator.mediaDevices.getUserMedia({
+                        audio: true,
+                        video: { width: { ideal: 240 }, height: { ideal: 180 } },
+                    });
                 } catch (err) {
                     console.error("getUserMedia failed:", err);
                 }
