@@ -222,8 +222,10 @@ class BrowserAudioPlayer:
 
     def start(self, track) -> None:
         self._leftover = None
-        logger.info(f"BrowserAudioPlayer: default device={sd.default.device}")
-        logger.info(f"BrowserAudioPlayer: available devices:\n{sd.query_devices()}")
+        device = Config.get("audio_output_device")
+        if device == -1:
+            device = None  # let sounddevice use system default
+        logger.info(f"BrowserAudioPlayer: opening output on device={device} (system default={sd.default.device})")
         try:
             self._stream = sd.OutputStream(
                 samplerate=48000,
@@ -232,9 +234,10 @@ class BrowserAudioPlayer:
                 blocksize=self._BLOCK_SAMPLES,
                 latency="high",
                 callback=self._callback,
+                device=device,
             )
             self._stream.start()
-            logger.info(f"BrowserAudioPlayer: OutputStream started on '{self._stream.device}'")
+            logger.info(f"BrowserAudioPlayer: OutputStream started on device index {self._stream.device}")
         except Exception as exc:
             logger.error(f"BrowserAudioPlayer: failed to open OutputStream: {exc}", exc_info=True)
             return
