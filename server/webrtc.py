@@ -10,7 +10,7 @@ import numpy as np
 import av
 import aiortc.codecs.h264 as _h264
 from aiortc import RTCPeerConnection, RTCSessionDescription
-from aiortc.mediastreams import AudioStreamTrack, VideoStreamTrack
+from aiortc.mediastreams import AudioStreamTrack, MediaStreamError, VideoStreamTrack
 
 from camera import Camera
 from handlers.base import BaseHandler
@@ -188,18 +188,21 @@ class BrowserAudioPlayer:
             stream = sd.OutputStream(samplerate=48000, channels=1, dtype="int16", latency="high")
             stream.start()
             while True:
-                frame = await track.recv()
-                arr = frame.to_ndarray()
-                # Mix to mono if stereo (arr shape is (channels, samples))
-                if arr.ndim > 1 and arr.shape[0] > 1:
-                    pcm = arr.mean(axis=0).astype(np.int16)
-                else:
-                    pcm = arr.flatten().astype(np.int16)
-                await asyncio.to_thread(stream.write, pcm)
+                try:
+                    frame = await track.recv()
+                    # Request s16p (signed 16-bit planar) so we always get int16
+                    # regardless of whether Opus decoded to fltp or s16p
+                    arr = frame.to_ndarray(format="s16p")  # shape: (channels, samples)
+                    pcm = arr.mean(axis=0).astype(np.int16)  # mix to mono
+                    await asyncio.to_thread(stream.write, pcm)
+                except asyncio.CancelledError:
+                    raise
+                except MediaStreamError:
+                    break
+                except Exception as exc:
+                    logger.warning(f"BrowserAudioPlayer frame error: {type(exc).__name__}: {exc}")
         except asyncio.CancelledError:
             pass
-        except Exception as exc:
-            logger.warning(f"BrowserAudioPlayer error: {exc}")
         finally:
             if stream is not None:
                 try:
@@ -234,6 +237,8 @@ class BrowserVideoReceiver:
                         lcd.display_frame(img)
                 except asyncio.CancelledError:
                     raise
+                except MediaStreamError:
+                    break
                 except Exception as exc:
                     logger.warning(f"BrowserVideoReceiver frame error: {type(exc).__name__}: {exc}", exc_info=True)
         except asyncio.CancelledError:
