@@ -40,9 +40,9 @@ echo "Installing PulseAudio..."
 sudo apt-get install -y pulseaudio pulseaudio-utils libasound2-plugins
 
 echo "Deploying PulseAudio config..."
-sudo cp config/audio/pulse-system.pa /etc/pulse/system.pa
-sudo cp config/audio/asound.conf /etc/asound.conf
-sudo cp config/audio/pulseaudio.service /etc/systemd/system/pulseaudio.service
+sudo cp config/audio/pulse-system.pa /etc/pulse/system.pa || { echo "ERROR: failed to copy pulse-system.pa"; exit 1; }
+sudo cp config/audio/asound.conf /etc/asound.conf || { echo "ERROR: failed to copy asound.conf"; exit 1; }
+sudo cp config/audio/pulseaudio.service /etc/systemd/system/pulseaudio.service || { echo "ERROR: failed to copy pulseaudio.service"; exit 1; }
 
 echo "Configuring PulseAudio permissions..."
 sudo adduser www-data pulse-access
@@ -53,18 +53,22 @@ sudo systemctl enable pulseaudio.service
 sudo systemctl restart pulseaudio.service
 
 echo "Verifying PulseAudio..."
-sleep 2  # give the daemon a moment to start
-if pactl info > /dev/null 2>&1; then
+for i in $(seq 1 10); do
+    sudo -u www-data pactl info > /dev/null 2>&1 && break
+    sleep 1
+done
+if sudo -u www-data pactl info > /dev/null 2>&1; then
     echo "  PulseAudio: OK"
 else
     echo "  WARNING: PulseAudio daemon not reachable — check: journalctl -u pulseaudio"
 fi
-if pactl list modules short 2>/dev/null | grep -q module-echo-cancel; then
+if sudo -u www-data pactl list modules short 2>/dev/null | grep -q module-echo-cancel; then
     echo "  Echo cancellation (webrtc): OK"
 else
     echo "  WARNING: module-echo-cancel not loaded — check /etc/pulse/system.pa"
-    echo "  If webrtc AEC is unavailable on this build, edit pulse-system.pa:"
-    echo "  change aec_method=webrtc to aec_method=speex and run install.sh again"
+    echo "  If webrtc AEC is unavailable on this build:"
+    echo "  edit server/config/audio/pulse-system.pa (change aec_method=webrtc to aec_method=speex)"
+    echo "  then re-run install.sh"
 fi
 # --- end PulseAudio setup ---
 
