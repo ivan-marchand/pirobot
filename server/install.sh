@@ -53,7 +53,7 @@ sudo systemctl enable pulseaudio.service
 sudo systemctl restart pulseaudio.service
 
 echo "Verifying PulseAudio..."
-for i in $(seq 1 10); do
+for _ in $(seq 1 10); do
     sudo -u www-data pactl info > /dev/null 2>&1 && break
     sleep 1
 done
