@@ -210,7 +210,12 @@ class BrowserAudioPlayer:
                 try:
                     frame = await track.recv()
                     arr = frame.to_ndarray()
-                    pcm_bytes = arr.flatten().astype(np.int16).tobytes()
+                    n_ch = len(frame.layout.channels)
+                    if n_ch > 1:
+                        # s16 interleaved: (1, samples*channels) → average to mono
+                        pcm_bytes = arr.reshape(-1, n_ch).mean(axis=1).astype(np.int16).tobytes()
+                    else:
+                        pcm_bytes = arr.flatten().astype(np.int16).tobytes()
 
                     if not _first_frame_logged:
                         logger.info(
