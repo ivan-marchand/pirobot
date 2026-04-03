@@ -7,6 +7,6 @@
 load-module module-native-protocol-unix auth-anonymous=1
 load-module module-alsa-sink device=hw:0,0
 load-module module-alsa-source device=hw:3,0
-load-module module-echo-cancel aec_method=webrtc source_master=alsa_input.hw_3_0 sink_master=alsa_output.hw_0_0 source_name=echocancel sink_name=echocancel
+load-module module-echo-cancel aec_method=webrtc source_master=alsa_input.hw_3_0 sink_master=alsa_output.hw_0_0 source_name=echocancel source_properties=device.description=EchoCancelledMic sink_name=echocancel_out
 set-default-source echocancel
-set-default-sink echocancel
+set-default-sink echocancel_out
