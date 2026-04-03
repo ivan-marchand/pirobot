@@ -34,4 +34,38 @@ sudo cp -rf ../react/pirobot/build/index.html /var/www/
 sudo cp pirobot.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable pirobot
+
+# --- PulseAudio setup ---
+echo "Installing PulseAudio..."
+sudo apt-get install -y pulseaudio pulseaudio-utils libasound2-plugins
+
+echo "Deploying PulseAudio config..."
+sudo cp config/audio/pulse-system.pa /etc/pulse/system.pa
+sudo cp config/audio/asound.conf /etc/asound.conf
+sudo cp config/audio/pulseaudio.service /etc/systemd/system/pulseaudio.service
+
+echo "Configuring PulseAudio permissions..."
+sudo adduser www-data pulse-access
+
+echo "Starting PulseAudio system service..."
+sudo systemctl daemon-reload
+sudo systemctl enable pulseaudio.service
+sudo systemctl restart pulseaudio.service
+
+echo "Verifying PulseAudio..."
+sleep 2  # give the daemon a moment to start
+if pactl info > /dev/null 2>&1; then
+    echo "  PulseAudio: OK"
+else
+    echo "  WARNING: PulseAudio daemon not reachable — check: journalctl -u pulseaudio"
+fi
+if pactl list modules short 2>/dev/null | grep -q module-echo-cancel; then
+    echo "  Echo cancellation (webrtc): OK"
+else
+    echo "  WARNING: module-echo-cancel not loaded — check /etc/pulse/system.pa"
+    echo "  If webrtc AEC is unavailable on this build, edit pulse-system.pa:"
+    echo "  change aec_method=webrtc to aec_method=speex and run install.sh again"
+fi
+# --- end PulseAudio setup ---
+
 sudo systemctl restart pirobot
