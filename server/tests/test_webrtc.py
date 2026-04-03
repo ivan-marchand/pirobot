@@ -1,7 +1,7 @@
 import asyncio
 import sys
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 import numpy as np
 
 # Ensure server/ is on the path
@@ -144,24 +144,58 @@ class TestRobotMicTrack(unittest.IsolatedAsyncioTestCase):
 
 class TestBrowserAudioPlayer(unittest.IsolatedAsyncioTestCase):
 
-    async def test_stop_cancels_task(self):
-        from unittest.mock import AsyncMock
-        with patch('webrtc.sd') as mock_sd:
-            mock_sd.OutputStream.return_value.start = lambda: None
-            mock_sd.OutputStream.return_value.stop = lambda: None
-            mock_sd.OutputStream.return_value.close = lambda: None
+    def _make_mock_proc(self):
+        mock_proc = MagicMock()
+        mock_proc.stdin = MagicMock()
+        mock_proc.stdin.write = MagicMock()
+        mock_proc.stdin.close = MagicMock()
+        mock_proc.terminate = MagicMock()
+        mock_proc.wait = AsyncMock()
+        return mock_proc
 
+    async def test_stop_cancels_task(self):
+        with patch('asyncio.create_subprocess_exec', AsyncMock(return_value=self._make_mock_proc())):
             from webrtc import BrowserAudioPlayer
             player = BrowserAudioPlayer()
-
             mock_track = MagicMock()
             mock_track.recv = AsyncMock(side_effect=asyncio.CancelledError())
-
             player.start(mock_track)
             self.assertIsNotNone(player._task)
-            await asyncio.sleep(0)  # yield control
+            await asyncio.sleep(0)
             player.stop()
             self.assertIsNone(player._task)
+
+    async def test_first_frame_logs_format_info(self):
+        import av
+        call_count = 0
+
+        frame = av.AudioFrame(format='s16', layout='mono', samples=960)
+        frame.sample_rate = 48000
+        frame.pts = 0
+
+        async def recv_impl():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return frame
+            await asyncio.sleep(10)  # block so the task doesn't race past the assert
+
+        mock_track = MagicMock()
+        mock_track.recv = recv_impl
+
+        with patch('asyncio.create_subprocess_exec', AsyncMock(return_value=self._make_mock_proc())), \
+             self.assertLogs('webrtc', level='INFO') as captured:
+            from webrtc import BrowserAudioPlayer
+            player = BrowserAudioPlayer()
+            player.start(mock_track)
+            await asyncio.sleep(0.05)
+            player.stop()
+            await asyncio.sleep(0.05)
+
+        self.assertTrue(
+            any('first frame' in msg for msg in captured.output),
+            f"Expected 'first frame' in log output, got: {captured.output}"
+        )
 
 
 class TestBrowserVideoReceiver(unittest.IsolatedAsyncioTestCase):

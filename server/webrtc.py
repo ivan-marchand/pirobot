@@ -205,10 +205,23 @@ class BrowserAudioPlayer:
             logger.info("BrowserAudioPlayer: aplay started")
             start_time: Optional[float] = None
             bytes_written = 0
+            _first_frame_logged = False
             while True:
                 try:
                     frame = await track.recv()
                     pcm_bytes = frame.to_ndarray().flatten().astype(np.int16).tobytes()
+
+                    if not _first_frame_logged:
+                        logger.info(
+                            f"BrowserAudioPlayer: first frame — "
+                            f"format={frame.format.name}, "
+                            f"sample_rate={frame.sample_rate}, "
+                            f"samples={frame.samples}, "
+                            f"channels={len(frame.layout.channels)}, "
+                            f"ndarray shape={frame.to_ndarray().shape}, "
+                            f"dtype={frame.to_ndarray().dtype}"
+                        )
+                        _first_frame_logged = True
 
                     now = time.monotonic()
                     if start_time is None:
