@@ -192,9 +192,9 @@ class TestBrowserAudioPlayer(unittest.IsolatedAsyncioTestCase):
             player.stop()
             await asyncio.sleep(0.05)
 
-        self.assertTrue(
-            any('first frame' in msg for msg in captured.output),
-            f"Expected 'first frame' in log output, got: {captured.output}"
+        first_frame_logs = [msg for msg in captured.output if 'first frame' in msg]
+        self.assertEqual(len(first_frame_logs), 1,
+            f"Expected exactly one 'first frame' log, got {len(first_frame_logs)}: {captured.output}"
         )
 
 

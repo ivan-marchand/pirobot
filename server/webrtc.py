@@ -209,7 +209,8 @@ class BrowserAudioPlayer:
             while True:
                 try:
                     frame = await track.recv()
-                    pcm_bytes = frame.to_ndarray().flatten().astype(np.int16).tobytes()
+                    arr = frame.to_ndarray()
+                    pcm_bytes = arr.flatten().astype(np.int16).tobytes()
 
                     if not _first_frame_logged:
                         logger.info(
@@ -218,8 +219,8 @@ class BrowserAudioPlayer:
                             f"sample_rate={frame.sample_rate}, "
                             f"samples={frame.samples}, "
                             f"channels={len(frame.layout.channels)}, "
-                            f"ndarray shape={frame.to_ndarray().shape}, "
-                            f"dtype={frame.to_ndarray().dtype}"
+                            f"ndarray shape={arr.shape}, "
+                            f"dtype={arr.dtype}"
                         )
                         _first_frame_logged = True
 
