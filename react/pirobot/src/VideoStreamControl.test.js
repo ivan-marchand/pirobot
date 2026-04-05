@@ -6,6 +6,7 @@ const baseProps = {
   updateFps: () => {},
   sendWebRTCMessage: () => {},
   talking: false,
+  listening: false,
 };
 
 test('renders a video element', () => {
@@ -133,10 +134,43 @@ test('listening change while talking=false sends a new WebRTC offer with listeni
   });
 
   const offerCalls = sendWebRTCMessage.mock.calls.filter(([msg]) => msg.action === 'offer');
-  expect(offerCalls.length).toBeGreaterThan(0);
+  expect(offerCalls.length).toBe(1); // from componentDidUpdate (mount with both false skips offer in jsdom timing)
   const lastOffer = offerCalls[offerCalls.length - 1][0];
   expect(lastOffer.listening).toBe(true);
   expect(lastOffer.talking).toBe(false);
 
   global.RTCPeerConnection = savedRTCPeerConnection;
+});
+
+test('talking change while listening=true includes listening=true in the offer', async () => {
+  const mockPc = {
+    addTransceiver: jest.fn().mockReturnValue({}),
+    addTrack: jest.fn(),
+    createOffer: jest.fn().mockResolvedValue({ sdp: 'fake-sdp', type: 'offer' }),
+    setLocalDescription: jest.fn().mockImplementation(function(desc) {
+      this.localDescription = desc;
+      return Promise.resolve();
+    }),
+    close: jest.fn(),
+    onicecandidate: null,
+    ontrack: null,
+  };
+  global.RTCPeerConnection = jest.fn().mockReturnValue(mockPc);
+
+  const sendWebRTCMessage = jest.fn();
+  const { rerender } = render(
+    <VideoStreamControl {...baseProps} sendWebRTCMessage={sendWebRTCMessage} talking={false} listening={true} />
+  );
+
+  await act(async () => {
+    rerender(<VideoStreamControl {...baseProps} sendWebRTCMessage={sendWebRTCMessage} talking={true} listening={true} />);
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+
+  const offerCalls = sendWebRTCMessage.mock.calls.filter(([msg]) => msg.action === 'offer');
+  const lastOffer = offerCalls[offerCalls.length - 1][0];
+  expect(lastOffer.talking).toBe(true);
+  expect(lastOffer.listening).toBe(true);
+
+  delete global.RTCPeerConnection;
 });
