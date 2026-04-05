@@ -55,10 +55,27 @@ test('clicking mute button toggles aria-label', () => {
   expect(screen.getByRole('button', { name: /unmute microphone/i })).toBeInTheDocument();
 });
 
+test('clicking mute button twice returns to unmuted state', () => {
+  render(<VideoStreamControl {...baseProps} talking={true} />);
+  const muteBtn = screen.getByRole('button', { name: /mute microphone/i });
+  fireEvent.click(muteBtn);
+  fireEvent.click(screen.getByRole('button', { name: /unmute microphone/i }));
+  expect(screen.getByRole('button', { name: /mute microphone/i })).toBeInTheDocument();
+});
+
 test('clicking camera button shows camera-off placeholder', () => {
   render(<VideoStreamControl {...baseProps} talking={true} />);
   const camBtn = screen.getByRole('button', { name: /turn off camera/i });
   fireEvent.click(camBtn);
   expect(screen.getByTestId('camera-off-placeholder')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /turn on camera/i })).toBeInTheDocument();
+});
+
+test('PiP video element stays in DOM when camera is off', () => {
+  render(<VideoStreamControl {...baseProps} talking={true} />);
+  fireEvent.click(screen.getByRole('button', { name: /turn off camera/i }));
+  const videos = document.querySelectorAll('video');
+  const pip = videos[1];
+  expect(pip).toBeInTheDocument();
+  expect(pip.style.display).toBe('none');
 });

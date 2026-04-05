@@ -219,13 +219,13 @@ class VideoStreamControl extends React.Component {
     toggleMuted = () => {
         const track = this._localStream?.getAudioTracks()[0];
         if (track) track.enabled = !track.enabled;
-        this.setState({ muted: !this.state.muted });
+        this.setState(prev => ({ muted: !prev.muted }));
     };
 
     toggleCamera = () => {
         const track = this._localStream?.getVideoTracks()[0];
         if (track) track.enabled = !track.enabled;
-        this.setState({ cameraOff: !this.state.cameraOff });
+        this.setState(prev => ({ cameraOff: !prev.cameraOff }));
     };
 
     render() {
