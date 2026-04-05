@@ -268,6 +268,25 @@ class TestWebRTCSessionManagerTalkingMode(unittest.IsolatedAsyncioTestCase):
             MockPlayer.assert_not_called()
             MockReceiver.assert_not_called()
 
+    async def test_handle_offer_listening_creates_mic_track(self):
+        with patch('webrtc._sounddevice_available', True), \
+             patch('webrtc.RobotMicTrack') as MockMicTrack, \
+             patch('webrtc.BrowserAudioPlayer') as MockPlayer, \
+             patch('webrtc.BrowserVideoReceiver') as MockReceiver, \
+             patch('webrtc.RTCPeerConnection') as MockPC, \
+             patch('webrtc.WebRTCTrack'):
+
+            from unittest.mock import AsyncMock
+            MockPC.return_value = self._make_mock_pc()
+
+            from webrtc import WebRTCSessionManager
+            session = WebRTCSessionManager(send_message=AsyncMock())
+            await session.handle_offer(sdp="fake_sdp", talking=False, listening=True)
+
+            MockMicTrack.assert_called_once()
+            MockPlayer.assert_not_called()   # BrowserAudioPlayer only when talking
+            MockReceiver.assert_not_called() # BrowserVideoReceiver only when talking
+
 
 if __name__ == "__main__":
     unittest.main()

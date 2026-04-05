@@ -377,16 +377,17 @@ class WebRTCSessionManager:
         self._audio_player: Optional[BrowserAudioPlayer] = None
         self._video_receiver: Optional[BrowserVideoReceiver] = None
 
-    async def handle_offer(self, sdp: str, talking: bool = False) -> None:
+    async def handle_offer(self, sdp: str, talking: bool = False, listening: bool = False) -> None:
         await self._close_connection()
 
         self._pc = RTCPeerConnection()
         self._track = WebRTCTrack()
         self._pc.addTrack(self._track)
 
-        if talking and _sounddevice_available:
+        if (talking or listening) and _sounddevice_available:
             self._mic_track = RobotMicTrack()
             self._pc.addTrack(self._mic_track)
+        if talking and _sounddevice_available:
             self._audio_player = BrowserAudioPlayer()
             self._video_receiver = BrowserVideoReceiver()
 
