@@ -1,4 +1,9 @@
 import React from "react";
+import IconButton from '@mui/material/IconButton';
+import MicIcon from '@mui/icons-material/Mic';
+import MicOffIcon from '@mui/icons-material/MicOff';
+import VideocamIcon from '@mui/icons-material/Videocam';
+import VideocamOffIcon from '@mui/icons-material/VideocamOff';
 
 const FPS_UPDATE_INTERVAL = 1; // seconds
 
@@ -14,6 +19,10 @@ class VideoStreamControl extends React.Component {
         this._videoRef = React.createRef();
         this._audioRef = React.createRef();
         this._pipRef = React.createRef();
+        this.state = {
+            muted: false,
+            cameraOff: false,
+        };
     }
 
     componentDidMount() {
@@ -32,6 +41,7 @@ class VideoStreamControl extends React.Component {
 
     _startWebRTC = async (talking = false) => {
         this._closeWebRTC();
+        this.setState({ muted: false, cameraOff: false });
         this._pendingCandidates = [];
 
         if (talking) {
@@ -206,6 +216,18 @@ class VideoStreamControl extends React.Component {
         this.props.updateFps(0);
     };
 
+    toggleMuted = () => {
+        const track = this._localStream?.getAudioTracks()[0];
+        if (track) track.enabled = !track.enabled;
+        this.setState({ muted: !this.state.muted });
+    };
+
+    toggleCamera = () => {
+        const track = this._localStream?.getVideoTracks()[0];
+        if (track) track.enabled = !track.enabled;
+        this.setState({ cameraOff: !this.state.cameraOff });
+    };
+
     render() {
         return (
             <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -218,22 +240,74 @@ class VideoStreamControl extends React.Component {
                 />
                 <audio ref={this._audioRef} autoPlay style={{ display: "none" }} />
                 {this.props.talking && (
-                    <video
-                        ref={this._pipRef}
-                        autoPlay
-                        playsInline
-                        muted
-                        style={{
+                    <div style={{
+                        position: "absolute",
+                        bottom: 8,
+                        right: 8,
+                        width: 120,
+                        height: 90,
+                        borderRadius: 4,
+                        border: "2px solid white",
+                        overflow: "hidden",
+                    }}>
+                        {this.state.cameraOff && (
+                            <div
+                                data-testid="camera-off-placeholder"
+                                style={{
+                                    position: "absolute",
+                                    inset: 0,
+                                    background: "#111",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                }}
+                            >
+                                <VideocamOffIcon style={{ color: "white", fontSize: 32 }} />
+                            </div>
+                        )}
+                        <video
+                            ref={this._pipRef}
+                            autoPlay
+                            playsInline
+                            muted
+                            style={{
+                                width: "100%",
+                                height: "100%",
+                                objectFit: "cover",
+                                display: this.state.cameraOff ? "none" : "block",
+                            }}
+                        />
+                        <div style={{
                             position: "absolute",
-                            bottom: 8,
-                            right: 8,
-                            width: 120,
-                            height: 90,
-                            objectFit: "cover",
-                            borderRadius: 4,
-                            border: "2px solid white",
-                        }}
-                    />
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            background: "rgba(0,0,0,0.45)",
+                            display: "flex",
+                            justifyContent: "center",
+                        }}>
+                            <IconButton
+                                size="small"
+                                onClick={this.toggleMuted}
+                                aria-label={this.state.muted ? "Unmute microphone" : "Mute microphone"}
+                                sx={{ color: "white", padding: "2px" }}
+                            >
+                                {this.state.muted
+                                    ? <MicOffIcon fontSize="small" />
+                                    : <MicIcon fontSize="small" />}
+                            </IconButton>
+                            <IconButton
+                                size="small"
+                                onClick={this.toggleCamera}
+                                aria-label={this.state.cameraOff ? "Turn on camera" : "Turn off camera"}
+                                sx={{ color: "white", padding: "2px" }}
+                            >
+                                {this.state.cameraOff
+                                    ? <VideocamOffIcon fontSize="small" />
+                                    : <VideocamIcon fontSize="small" />}
+                            </IconButton>
+                        </div>
+                    </div>
                 )}
             </div>
         );
