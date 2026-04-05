@@ -57,7 +57,7 @@ A "listen" button in the toolbar lets the user receive audio from the robot's mi
 
 ### Placement
 
-Toolbar, next to the talk (mic) button. Gated on `robot_has_microphone` — same condition as the talk button. Icon: `VolumeUpIcon` / `VolumeOffIcon`.
+Toolbar, next to the talk (mic) button. Gated on `robot_has_microphone` — same condition as the talk button. Icon: `VolumeUpIcon` (inactive) / `VolumeOffIcon` (active — currently listening).
 
 ### Behaviour
 
