@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import VideoStreamControl from './VideoStreamControl';
 
 const baseProps = {
@@ -82,4 +82,61 @@ test('PiP video element stays in DOM when camera is off', () => {
 
 test('renders without error when listening=true and talking=false', () => {
   expect(() => render(<VideoStreamControl {...baseProps} listening={true} />)).not.toThrow();
+});
+
+test('listening change while talking=true does not reset muted state', () => {
+  const { rerender } = render(
+    <VideoStreamControl {...baseProps} talking={true} listening={false} />
+  );
+  // Mute mic so we can detect if state was reset by a restart
+  fireEvent.click(screen.getByRole('button', { name: /mute microphone/i }));
+  expect(screen.getByRole('button', { name: /unmute microphone/i })).toBeInTheDocument();
+
+  // Change listening while still talking — should NOT restart, muted stays true
+  rerender(<VideoStreamControl {...baseProps} talking={true} listening={true} />);
+  expect(screen.getByRole('button', { name: /unmute microphone/i })).toBeInTheDocument();
+});
+
+test('listening change while talking=false sends a new WebRTC offer with listening=true', async () => {
+  const makeMockPc = () => {
+    const pc = {
+      addTransceiver: jest.fn().mockReturnValue({}),
+      addTrack: jest.fn(),
+      createOffer: jest.fn().mockResolvedValue({ sdp: 'fake-sdp', type: 'offer' }),
+      setLocalDescription: jest.fn().mockImplementation(function(desc) {
+        pc.localDescription = desc;
+        return Promise.resolve();
+      }),
+      close: jest.fn(),
+      onicecandidate: null,
+      ontrack: null,
+      localDescription: null,
+    };
+    return pc;
+  };
+
+  const savedRTCPeerConnection = global.RTCPeerConnection;
+  global.RTCPeerConnection = jest.fn().mockImplementation(makeMockPc);
+
+  const sendWebRTCMessage = jest.fn();
+
+  await act(async () => {
+    const { rerender } = render(
+      <VideoStreamControl {...baseProps} sendWebRTCMessage={sendWebRTCMessage} talking={false} listening={false} />
+    );
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    await act(async () => {
+      rerender(<VideoStreamControl {...baseProps} sendWebRTCMessage={sendWebRTCMessage} talking={false} listening={true} />);
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+  });
+
+  const offerCalls = sendWebRTCMessage.mock.calls.filter(([msg]) => msg.action === 'offer');
+  expect(offerCalls.length).toBeGreaterThan(0);
+  const lastOffer = offerCalls[offerCalls.length - 1][0];
+  expect(lastOffer.listening).toBe(true);
+  expect(lastOffer.talking).toBe(false);
+
+  global.RTCPeerConnection = savedRTCPeerConnection;
 });
