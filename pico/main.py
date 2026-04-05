@@ -1,5 +1,4 @@
-from machine import ADC, Pin, PWM, UART, Timer
-from micropython import disable_irq, enable_irq
+from machine import ADC, Pin, PWM, UART, Timer, disable_irq, enable_irq
 import utime
 
 # Global variables
