@@ -86,7 +86,7 @@ class Home extends React.Component {
 
             // Restart WebRTC now that we have a fresh server connection
             if (this.videoStreamRef.current) {
-                this.videoStreamRef.current._startWebRTC(this.state.talking);
+                this.videoStreamRef.current._startWebRTC(this.state.talking, this.state.listening);
             }
         };
 

@@ -26,12 +26,18 @@ class VideoStreamControl extends React.Component {
     }
 
     componentDidMount() {
-        this._startWebRTC(this.props.talking || false);
+        this._startWebRTC(this.props.talking || false, this.props.listening || false);
     }
 
     componentDidUpdate(prevProps) {
-        if (prevProps.talking !== this.props.talking) {
-            this._startWebRTC(this.props.talking || false);
+        const talkingChanged = prevProps.talking !== this.props.talking;
+        const listeningChanged = prevProps.listening !== this.props.listening;
+        if (talkingChanged) {
+            this._startWebRTC(this.props.talking || false, this.props.listening || false);
+        } else if (listeningChanged && !this.props.talking) {
+            // Only restart for listening changes when not talking — robot audio
+            // already flows during talk mode regardless of listening state.
+            this._startWebRTC(false, this.props.listening || false);
         }
     }
 
@@ -39,7 +45,7 @@ class VideoStreamControl extends React.Component {
         this._closeWebRTC();
     }
 
-    _startWebRTC = async (talking = false) => {
+    _startWebRTC = async (talking = false, listening = false) => {
         this._closeWebRTC();
         this.setState({ muted: false, cameraOff: false });
         this._pendingCandidates = [];
@@ -93,8 +99,10 @@ class VideoStreamControl extends React.Component {
 
         pc.addTransceiver("video", { direction: "recvonly" });
 
-        if (talking && this._localStream) {
+        if (talking || listening) {
             pc.addTransceiver("audio", { direction: "recvonly" });
+        }
+        if (talking && this._localStream) {
             const audioTrack = this._localStream.getAudioTracks()[0];
             const videoTrack = this._localStream.getVideoTracks()[0];
             if (audioTrack) pc.addTransceiver(audioTrack, { direction: "sendonly" });
@@ -112,6 +120,7 @@ class VideoStreamControl extends React.Component {
                 sdp: pc.localDescription.sdp,
                 type: "offer",
                 talking: talking,
+                listening: listening,
             });
         } catch (err) {
             console.error("WebRTC offer failed:", err);

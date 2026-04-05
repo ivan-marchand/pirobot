@@ -79,3 +79,7 @@ test('PiP video element stays in DOM when camera is off', () => {
   expect(pip).toBeInTheDocument();
   expect(pip.style.display).toBe('none');
 });
+
+test('renders without error when listening=true and talking=false', () => {
+  expect(() => render(<VideoStreamControl {...baseProps} listening={true} />)).not.toThrow();
+});
