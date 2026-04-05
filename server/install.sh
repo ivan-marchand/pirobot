@@ -10,6 +10,7 @@ $UV sync
 
 $UV run pyinstaller manage.py $(ls handlers/* | grep -v __init__.py | grep -v base.py | grep -v __pycache__ | grep -v .pyc | sed -e 's/handlers\/\(\w\+\).py/ --hidden-import  handlers.\1/g') --collect-all cv2 --hidden-import picamera2 --hidden-import libcamera -F -n $DAEMON_NAME
 
+sudo systemctl stop pirobot 2>/dev/null || true
 sudo cp dist/$DAEMON_NAME /usr/local/bin/
 sudo mkdir -p /etc/$APP_NAME
 sudo cp -rf config /etc/$APP_NAME/
