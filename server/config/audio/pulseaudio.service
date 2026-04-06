@@ -1,0 +1,11 @@
+[Unit]
+Description=PulseAudio Sound System (system mode for PiRobot)
+After=sound.target
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/pulseaudio --system --disallow-exit --disallow-module-loading=0 --daemonize=no --log-target=journal
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+# PulseAudio system-mode config for PiRobot
+# Deployed to /etc/pulse/system.pa by install.sh
+#
+# module-echo-cancel uses Chromium's WebRTC AEC engine to subtract the
+# speaker signal from the robot microphone, preventing echo in the browser.
+
+load-module module-native-protocol-unix auth-anonymous=1
+load-module module-alsa-sink device=hw:0,0
+load-module module-alsa-source device=hw:3,0
+load-module module-echo-cancel aec_method=webrtc source_master=alsa_input.hw_3_0 sink_master=alsa_output.hw_0_0 source_name=echocancel source_properties=device.description=EchoCancelledMic sink_name=echocancel_out
+set-default-source echocancel
+set-default-sink echocancel_out

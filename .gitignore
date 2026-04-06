@@ -134,3 +134,4 @@ dmypy.json
 
 .secret.key
 .DS_Store
+.superpowers

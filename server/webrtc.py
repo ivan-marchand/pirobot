@@ -10,7 +10,7 @@ import numpy as np
 import av
 import aiortc.codecs.h264 as _h264
 from aiortc import RTCPeerConnection, RTCSessionDescription
-from aiortc.mediastreams import AudioStreamTrack, VideoStreamTrack
+from aiortc.mediastreams import AudioStreamTrack, MediaStreamError, VideoStreamTrack
 
 from camera import Camera
 from handlers.base import BaseHandler
@@ -174,32 +174,94 @@ class RobotMicTrack(AudioStreamTrack):
 
 
 class BrowserAudioPlayer:
-    """Plays incoming browser audio frames through the Pi speaker via sounddevice."""
+    """Plays incoming browser audio frames by piping raw PCM to aplay.
+
+    Bypasses sounddevice/PortAudio entirely — aplay handles buffering and
+    ALSA device access in its own process, completely off the event loop.
+    """
 
     def __init__(self):
         self._task: Optional[asyncio.Task] = None
 
     def start(self, track) -> None:
-        self._task = asyncio.ensure_future(self._play(track))
+        self._task = asyncio.ensure_future(self._receive(track))
 
-    async def _play(self, track) -> None:
-        stream = None
+    _SAMPLE_RATE = 48000
+    _BYTES_PER_SEC = _SAMPLE_RATE * 2  # 16-bit mono = 96000 bytes/sec
+    _APLAY_BUFFER_SEC = 0.2            # -B 200000 = 200 ms ALSA pre-buffer
+    _MAX_AHEAD_SEC = 0.3               # drop frames if >300 ms ahead of playback clock
+
+    async def _receive(self, track) -> None:
+        import time
+        proc = None
         try:
-            stream = sd.OutputStream(samplerate=48000, channels=1, dtype="int16")
-            stream.start()
+            proc = await asyncio.create_subprocess_exec(
+                "aplay", "-f", "S16_LE", "-r", "48000", "-c", "1", "-t", "raw",
+                "-B", "200000",
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            logger.info("BrowserAudioPlayer: aplay started")
+            start_time: Optional[float] = None
+            bytes_written = 0
+            _first_frame_logged = False
             while True:
-                frame = await track.recv()
-                pcm = frame.to_ndarray().flatten().astype(np.int16)
-                stream.write(pcm)
+                try:
+                    frame = await track.recv()
+                    arr = frame.to_ndarray()
+                    n_ch = len(frame.layout.channels)
+                    if n_ch > 1:
+                        # s16 interleaved: (1, samples*channels) → average to mono
+                        pcm_bytes = arr.reshape(-1, n_ch).mean(axis=1).astype(np.int16).tobytes()
+                    else:
+                        pcm_bytes = arr.flatten().astype(np.int16).tobytes()
+
+                    if not _first_frame_logged:
+                        logger.info(
+                            f"BrowserAudioPlayer: first frame — "
+                            f"format={frame.format.name}, "
+                            f"sample_rate={frame.sample_rate}, "
+                            f"samples={frame.samples}, "
+                            f"channels={len(frame.layout.channels)}, "
+                            f"ndarray shape={arr.shape}, "
+                            f"dtype={arr.dtype}"
+                        )
+                        _first_frame_logged = True
+
+                    now = time.monotonic()
+                    if start_time is None:
+                        start_time = now
+
+                    # Estimate bytes aplay has consumed (wall-clock minus initial buffer fill)
+                    elapsed = now - start_time
+                    bytes_played = max(0.0, elapsed - self._APLAY_BUFFER_SEC) * self._BYTES_PER_SEC
+                    buffer_depth_sec = (bytes_written - bytes_played) / self._BYTES_PER_SEC
+
+                    if buffer_depth_sec > self._MAX_AHEAD_SEC:
+                        continue  # drop — we're ahead of playback, prevent lag buildup
+
+                    proc.stdin.write(pcm_bytes)
+                    bytes_written += len(pcm_bytes)
+                except asyncio.CancelledError:
+                    raise
+                except MediaStreamError:
+                    break
+                except Exception as exc:
+                    logger.warning(f"BrowserAudioPlayer frame error: {type(exc).__name__}: {exc}")
         except asyncio.CancelledError:
             pass
         except Exception as exc:
-            logger.warning(f"BrowserAudioPlayer error: {exc}")
+            logger.error(f"BrowserAudioPlayer: failed to start aplay: {exc}")
         finally:
-            if stream is not None:
+            if proc is not None:
                 try:
-                    stream.stop()
-                    stream.close()
+                    proc.stdin.close()
+                except Exception:
+                    pass
+                try:
+                    proc.terminate()
+                    await asyncio.wait_for(proc.wait(), timeout=2.0)
                 except Exception:
                     pass
 
@@ -210,7 +272,14 @@ class BrowserAudioPlayer:
 
 
 class BrowserVideoReceiver:
-    """Forwards incoming browser webcam frames to the LCD handler."""
+    """Forwards incoming browser webcam frames to the LCD handler.
+
+    LCD updates are rate-limited and offloaded to a thread — SPI writes are
+    blocking and take ~50-100ms; running them on the event loop would stall
+    everything else.
+    """
+
+    _LCD_FPS = 5  # SPI bus can't sustain more than ~5-10 FPS at 240x320
 
     def __init__(self):
         self._task: Optional[asyncio.Task] = None
@@ -219,17 +288,29 @@ class BrowserVideoReceiver:
         self._task = asyncio.ensure_future(self._receive(track))
 
     async def _receive(self, track) -> None:
+        loop = asyncio.get_running_loop()
+        frame_interval = 1.0 / self._LCD_FPS
+        last_lcd_update = 0.0
         try:
             while True:
-                frame = await track.recv()
-                lcd = BaseHandler.get_handler("lcd")
-                if lcd is not None and lcd.eligible:
-                    img = frame.to_ndarray(format="rgb24")
-                    lcd.display_frame(img)
+                try:
+                    frame = await track.recv()
+                    now = loop.time()
+                    if now - last_lcd_update < frame_interval:
+                        continue
+                    lcd = BaseHandler.get_handler("lcd")
+                    if lcd is not None and lcd.eligible:
+                        img = frame.to_ndarray(format="rgb24")
+                        await asyncio.to_thread(lcd.display_frame, img)
+                        last_lcd_update = loop.time()
+                except asyncio.CancelledError:
+                    raise
+                except MediaStreamError:
+                    break
+                except Exception as exc:
+                    logger.warning(f"BrowserVideoReceiver frame error: {type(exc).__name__}: {exc}", exc_info=True)
         except asyncio.CancelledError:
             pass
-        except Exception as exc:
-            logger.warning(f"BrowserVideoReceiver error: {exc}")
         finally:
             lcd = BaseHandler.get_handler("lcd")
             if lcd is not None and lcd.eligible:
@@ -296,16 +377,17 @@ class WebRTCSessionManager:
         self._audio_player: Optional[BrowserAudioPlayer] = None
         self._video_receiver: Optional[BrowserVideoReceiver] = None
 
-    async def handle_offer(self, sdp: str, talking: bool = False) -> None:
+    async def handle_offer(self, sdp: str, talking: bool = False, listening: bool = False) -> None:
         await self._close_connection()
 
         self._pc = RTCPeerConnection()
         self._track = WebRTCTrack()
         self._pc.addTrack(self._track)
 
-        if talking and _sounddevice_available:
+        if (talking or listening) and _sounddevice_available:
             self._mic_track = RobotMicTrack()
             self._pc.addTrack(self._mic_track)
+        if talking and _sounddevice_available:
             self._audio_player = BrowserAudioPlayer()
             self._video_receiver = BrowserVideoReceiver()
 

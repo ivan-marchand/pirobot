@@ -1,7 +1,7 @@
 import asyncio
 import sys
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 import numpy as np
 
 # Ensure server/ is on the path
@@ -144,24 +144,58 @@ class TestRobotMicTrack(unittest.IsolatedAsyncioTestCase):
 
 class TestBrowserAudioPlayer(unittest.IsolatedAsyncioTestCase):
 
-    async def test_stop_cancels_task(self):
-        from unittest.mock import AsyncMock
-        with patch('webrtc.sd') as mock_sd:
-            mock_sd.OutputStream.return_value.start = lambda: None
-            mock_sd.OutputStream.return_value.stop = lambda: None
-            mock_sd.OutputStream.return_value.close = lambda: None
+    def _make_mock_proc(self):
+        mock_proc = MagicMock()
+        mock_proc.stdin = MagicMock()
+        mock_proc.stdin.write = MagicMock()
+        mock_proc.stdin.close = MagicMock()
+        mock_proc.terminate = MagicMock()
+        mock_proc.wait = AsyncMock()
+        return mock_proc
 
+    async def test_stop_cancels_task(self):
+        with patch('asyncio.create_subprocess_exec', AsyncMock(return_value=self._make_mock_proc())):
             from webrtc import BrowserAudioPlayer
             player = BrowserAudioPlayer()
-
             mock_track = MagicMock()
             mock_track.recv = AsyncMock(side_effect=asyncio.CancelledError())
-
             player.start(mock_track)
             self.assertIsNotNone(player._task)
-            await asyncio.sleep(0)  # yield control
+            await asyncio.sleep(0)
             player.stop()
             self.assertIsNone(player._task)
+
+    async def test_first_frame_logs_format_info(self):
+        import av
+        call_count = 0
+
+        frame = av.AudioFrame(format='s16', layout='mono', samples=960)
+        frame.sample_rate = 48000
+        frame.pts = 0
+
+        async def recv_impl():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return frame
+            await asyncio.sleep(10)  # block so the task doesn't race past the assert
+
+        mock_track = MagicMock()
+        mock_track.recv = recv_impl
+
+        with patch('asyncio.create_subprocess_exec', AsyncMock(return_value=self._make_mock_proc())), \
+             self.assertLogs('webrtc', level='INFO') as captured:
+            from webrtc import BrowserAudioPlayer
+            player = BrowserAudioPlayer()
+            player.start(mock_track)
+            await asyncio.sleep(0.05)
+            player.stop()
+            await asyncio.sleep(0.05)
+
+        first_frame_logs = [msg for msg in captured.output if 'first frame' in msg]
+        self.assertEqual(len(first_frame_logs), 1,
+            f"Expected exactly one 'first frame' log, got {len(first_frame_logs)}: {captured.output}"
+        )
 
 
 class TestBrowserVideoReceiver(unittest.IsolatedAsyncioTestCase):
@@ -233,6 +267,25 @@ class TestWebRTCSessionManagerTalkingMode(unittest.IsolatedAsyncioTestCase):
             MockMicTrack.assert_not_called()
             MockPlayer.assert_not_called()
             MockReceiver.assert_not_called()
+
+    async def test_handle_offer_listening_creates_mic_track(self):
+        with patch('webrtc._sounddevice_available', True), \
+             patch('webrtc.RobotMicTrack') as MockMicTrack, \
+             patch('webrtc.BrowserAudioPlayer') as MockPlayer, \
+             patch('webrtc.BrowserVideoReceiver') as MockReceiver, \
+             patch('webrtc.RTCPeerConnection') as MockPC, \
+             patch('webrtc.WebRTCTrack'):
+
+            from unittest.mock import AsyncMock
+            MockPC.return_value = self._make_mock_pc()
+
+            from webrtc import WebRTCSessionManager
+            session = WebRTCSessionManager(send_message=AsyncMock())
+            await session.handle_offer(sdp="fake_sdp", talking=False, listening=True)
+
+            MockMicTrack.assert_called_once()
+            MockPlayer.assert_not_called()   # BrowserAudioPlayer only when talking
+            MockReceiver.assert_not_called() # BrowserVideoReceiver only when talking
 
 
 if __name__ == "__main__":

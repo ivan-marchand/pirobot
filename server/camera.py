@@ -84,17 +84,21 @@ class CaptureDevice(object):
                 self.device = picamera.PiCamera(resolution=resolution)
 
     def add_overlay(self, frame, overlay_frame, pos, size):
+        h, w = frame.shape[:2]
         resized = cv2.resize(overlay_frame,
-                             [int((size[0] * self.res_x) / 100), int((size[1] * self.res_y) / 100)],
+                             [max(1, int((size[0] * w) / 100)), max(1, int((size[1] * h) / 100))],
                              interpolation=cv2.INTER_AREA)
-        x_offset, y_offset = [int((pos[0] * self.res_x) / 100), int((pos[1] * self.res_y) / 100)]
-
-        frame[y_offset:y_offset + resized.shape[0], x_offset:x_offset + resized.shape[1]] = resized
+        x_offset = int((pos[0] * w) / 100)
+        y_offset = int((pos[1] * h) / 100)
+        x_end = min(w, x_offset + resized.shape[1])
+        y_end = min(h, y_offset + resized.shape[0])
+        frame[y_offset:y_end, x_offset:x_end] = resized[:y_end - y_offset, :x_end - x_offset]
 
     def add_radar(self, frame, pos, size):
+        h, w = frame.shape[:2]
         motor_status = Motor.serialize()
         left_us_distance, front_us_distance, right_us_distance = motor_status.get('us_distances')
-        radius = 0.15 * self.res_x
+        radius = 0.15 * w
 
         color = (0, 255, 0)
         thickness = 2
@@ -104,26 +108,26 @@ class CaptureDevice(object):
             if normalized_distance <= radius:
                 cx = normalized_distance * math.sin(angle * math.pi / 180)
                 cy = normalized_distance * math.cos(angle * math.pi / 180)
-                x = int(cx + self.res_x // 2)
-                y = int(self.res_y - cy)
+                x = int(cx + w // 2)
+                y = int(h - cy)
                 cv2.circle(frame, (x, y), radius=4, color=(0, 0, 255), thickness=2)
 
-        cv2.circle(frame, (self.res_x // 2, self.res_y), radius=int(radius), color=(0, 255, 0), thickness=2)
+        cv2.circle(frame, (w // 2, h), radius=int(radius), color=(0, 255, 0), thickness=2)
         cv2.line(frame,
-                 (self.res_x // 2, self.res_y),
-                 (int(self.res_x // 2 - radius * math.sin(math.pi / 4)), int(self.res_y - radius * math.sin(math.pi / 4))),
+                 (w // 2, h),
+                 (int(w // 2 - radius * math.sin(math.pi / 4)), int(h - radius * math.sin(math.pi / 4))),
                  color,
                  thickness)
-        cv2.circle(frame, (self.res_x // 2, self.res_y), radius=int(2 * radius / 3), color=(0, 255, 0), thickness=2)
+        cv2.circle(frame, (w // 2, h), radius=int(2 * radius / 3), color=(0, 255, 0), thickness=2)
         cv2.line(frame,
-                 (self.res_x // 2, self.res_y),
-                 (self.res_x // 2, int(self.res_y - radius)),
+                 (w // 2, h),
+                 (w // 2, int(h - radius)),
                  color,
                  thickness)
-        cv2.circle(frame, (self.res_x // 2, self.res_y), radius=int(radius / 3), color=(0, 255, 0), thickness=2)
+        cv2.circle(frame, (w // 2, h), radius=int(radius / 3), color=(0, 255, 0), thickness=2)
         cv2.line(frame,
-                 (self.res_x // 2, self.res_y),
-                 (int(self.res_x // 2 + radius * math.sin(math.pi / 4)), int(self.res_y - radius * math.sin(math.pi / 4))),
+                 (w // 2, h),
+                 (int(w // 2 + radius * math.sin(math.pi / 4)), int(h - radius * math.sin(math.pi / 4))),
                  color,
                  thickness)
 
@@ -135,22 +139,23 @@ class CaptureDevice(object):
             add_circle(right_us_distance, 45)
 
     def add_navigation_lines(self, frame):
+        h, w = frame.shape[:2]
         color = (0, 255, 0)
         thickness = 2
 
         # Visor
         radius = 30
         y_offest = 30
-        center_x = self.res_x // 2
-        center_y = self.res_y // 2 + y_offest
+        center_x = w // 2
+        center_y = h // 2 + y_offest
         cv2.line(frame, (center_x, center_y + (radius + 10)), (center_x, center_y - (radius + 10)), color, thickness)
         cv2.line(frame, (center_x + (radius + 10), center_y), (center_x - (radius + 10), center_y), color, thickness)
         cv2.circle(frame, (center_x, center_y), radius, color, thickness)
 
         # Path
         path_bottom = 100
-        cv2.line(frame, (center_x, center_y), (path_bottom, self.res_y), color, thickness)
-        cv2.line(frame, (center_x, center_y), (self.res_x - path_bottom, self.res_y), color, thickness)
+        cv2.line(frame, (center_x, center_y), (path_bottom, h), color, thickness)
+        cv2.line(frame, (center_x, center_y), (w - path_bottom, h), color, thickness)
 
         # Speed and distance
         font = cv2.FONT_HERSHEY_SIMPLEX
@@ -164,16 +169,16 @@ class CaptureDevice(object):
         cv2.putText(frame, f"ODO: {motor_status['abs_distance'] / 1000:.2f} m", (5, 5 + text_h), font, fontScale, color, thickness)
 
         # Left
-        cv2.putText(frame, f"{motor_status['left']['speed_rpm']} RPM", (5, self.res_y - 15), font, fontScale, color, thickness)
-        cv2.rectangle(frame, (5, self.res_y - 50), (5 + 40, self.res_y - 50 - 400), color, thickness)
-        cv2.rectangle(frame, (5, self.res_y - 50 - 200), (5 + 40, self.res_y - 50 - 200 - int(motor_status['left']['duty'] * 2)), color, -1)
+        cv2.putText(frame, f"{motor_status['left']['speed_rpm']} RPM", (5, h - 15), font, fontScale, color, thickness)
+        cv2.rectangle(frame, (5, h - 50), (5 + 40, h - 50 - 400), color, thickness)
+        cv2.rectangle(frame, (5, h - 50 - 200), (5 + 40, h - 50 - 200 - int(motor_status['left']['duty'] * 2)), color, -1)
 
         # Right
         right_speed_str = f"{motor_status['right']['speed_rpm']} RPM"
         text_w, text_h = cv2.getTextSize(text=right_speed_str, fontFace=font, fontScale=fontScale, thickness=thickness)[0]
-        cv2.putText(frame, right_speed_str, (self.res_x - text_w - 5, self.res_y - 15), font, fontScale, color, thickness)
-        cv2.rectangle(frame, (self.res_x - 5, self.res_y - 50), (self.res_x - 5 - 40, self.res_y - 50 - 400), color, thickness)
-        cv2.rectangle(frame, (self.res_x - 5, self.res_y - 50 - 200), (self.res_x - 5 - 40, self.res_y - 50 - 200 - int(motor_status['right']['duty'] * 2)), color, -1)
+        cv2.putText(frame, right_speed_str, (w - text_w - 5, h - 15), font, fontScale, color, thickness)
+        cv2.rectangle(frame, (w - 5, h - 50), (w - 5 - 40, h - 50 - 400), color, thickness)
+        cv2.rectangle(frame, (w - 5, h - 50 - 200), (w - 5 - 40, h - 50 - 200 - int(motor_status['right']['duty'] * 2)), color, -1)
 
     def grab(self):
         if self.capturing_device == "usb":

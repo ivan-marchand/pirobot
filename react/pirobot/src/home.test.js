@@ -70,3 +70,39 @@ test('mic button toggles to stop talking on click', () => {
   unmount();
   global.WebSocket = MockWebSocket;
 });
+
+test('listen button is not visible when robot_has_microphone is not set', () => {
+  wrap(<Home />);
+  expect(screen.queryByRole('button', { name: /listen to robot/i })).not.toBeInTheDocument();
+});
+
+test('listen button is visible when robot_config.robot_has_microphone is true', () => {
+  const ws = new MockWebSocket();
+  global.WebSocket = jest.fn(() => ws);
+  const { unmount } = wrap(<Home />);
+  act(() => {
+    ws.onmessage({ data: JSON.stringify({
+      topic: "status",
+      message: { config: { robot_has_microphone: true }, robot_name: "TestBot", status: {} },
+    })});
+  });
+  expect(screen.getByRole('button', { name: /listen to robot/i })).toBeInTheDocument();
+  unmount();
+  global.WebSocket = MockWebSocket;
+});
+
+test('listen button toggles to stop listening on click', () => {
+  const ws = new MockWebSocket();
+  global.WebSocket = jest.fn(() => ws);
+  const { unmount } = wrap(<Home />);
+  act(() => {
+    ws.onmessage({ data: JSON.stringify({
+      topic: "status",
+      message: { config: { robot_has_microphone: true }, robot_name: "TestBot", status: {} },
+    })});
+  });
+  fireEvent.click(screen.getByRole('button', { name: /listen to robot/i }));
+  expect(screen.getByRole('button', { name: /stop listening/i })).toBeInTheDocument();
+  unmount();
+  global.WebSocket = MockWebSocket;
+});

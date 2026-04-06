@@ -20,6 +20,8 @@ import VerticalAlignCenterIcon from '@mui/icons-material/VerticalAlignCenter';
 import RadarIcon from '@mui/icons-material/Radar';
 import MicIcon from '@mui/icons-material/Mic';
 import MicOffIcon from '@mui/icons-material/MicOff';
+import VolumeUpIcon from '@mui/icons-material/VolumeUp';
+import VolumeOffIcon from '@mui/icons-material/VolumeOff';
 import GamepadIcon from '@mui/icons-material/Gamepad';
 import ControlCameraIcon from '@mui/icons-material/ControlCamera';
 import FlashlightOnIcon from '@mui/icons-material/FlashlightOn';
@@ -47,6 +49,7 @@ class Home extends React.Component {
             control_arm: false,
             drive_slow_mode: false,
             talking: false,
+            listening: false,
         };
         this.selected_camera = "front"
         this.videoStreamRef = React.createRef();
@@ -65,7 +68,7 @@ class Home extends React.Component {
      */
     connect = () => {
         console.log("Connecting to robot websocket");
-        let ws_url = "ws://" + (window.location.port === "3000" ? "localhost:8080" : window.location.host) + "/ws/robot";
+        let ws_url = "wss://" + (window.location.port === "3000" ? "localhost:8080" : window.location.host) + "/ws/robot";
 
         var ws = new WebSocket(ws_url);
         let that = this; // cache the this
@@ -83,7 +86,7 @@ class Home extends React.Component {
 
             // Restart WebRTC now that we have a fresh server connection
             if (this.videoStreamRef.current) {
-                this.videoStreamRef.current._startWebRTC(this.state.talking);
+                this.videoStreamRef.current._startWebRTC(this.state.talking, this.state.listening);
             }
         };
 
@@ -257,6 +260,10 @@ class Home extends React.Component {
         this.setState({ talking: !this.state.talking });
     }
 
+    toggleListening = () => {
+        this.setState(prev => ({ listening: !prev.listening }));
+    }
+
     render() {
         document.body.style.overflow = "hidden";
         return (
@@ -299,8 +306,15 @@ class Home extends React.Component {
                   {this.state.robot_config.robot_has_microphone && <Divider orientation="vertical" flexItem/>}
                   {this.state.robot_config.robot_has_microphone && (
                       <Tooltip title={this.state.talking ? "Stop talking" : "Start talking"}>
-                          <IconButton onClick={this.toggleTalking}>
+                          <IconButton onClick={this.toggleTalking} aria-label={this.state.talking ? "Stop talking" : "Start talking"}>
                               {this.state.talking ? <MicOffIcon /> : <MicIcon />}
+                          </IconButton>
+                      </Tooltip>
+                  )}
+                  {this.state.robot_config.robot_has_microphone && (
+                      <Tooltip title={this.state.listening ? "Stop listening" : "Listen to robot"}>
+                          <IconButton onClick={this.toggleListening} aria-label={this.state.listening ? "Stop listening" : "Listen to robot"}>
+                              {this.state.listening ? <VolumeOffIcon /> : <VolumeUpIcon />}
                           </IconButton>
                       </Tooltip>
                   )}
@@ -332,6 +346,7 @@ class Home extends React.Component {
                         updateFps={this.updateFps}
                         sendWebRTCMessage={this.sendWebRTCMessage}
                         talking={this.state.talking}
+                        listening={this.state.listening}
                     />
                   </Box>
 

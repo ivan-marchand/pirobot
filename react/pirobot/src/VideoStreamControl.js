@@ -1,4 +1,9 @@
 import React from "react";
+import IconButton from '@mui/material/IconButton';
+import MicIcon from '@mui/icons-material/Mic';
+import MicOffIcon from '@mui/icons-material/MicOff';
+import VideocamIcon from '@mui/icons-material/Videocam';
+import VideocamOffIcon from '@mui/icons-material/VideocamOff';
 
 const FPS_UPDATE_INTERVAL = 1; // seconds
 
@@ -14,15 +19,25 @@ class VideoStreamControl extends React.Component {
         this._videoRef = React.createRef();
         this._audioRef = React.createRef();
         this._pipRef = React.createRef();
+        this.state = {
+            muted: false,
+            cameraOff: false,
+        };
     }
 
     componentDidMount() {
-        this._startWebRTC(this.props.talking || false);
+        this._startWebRTC(this.props.talking || false, this.props.listening || false);
     }
 
     componentDidUpdate(prevProps) {
-        if (prevProps.talking !== this.props.talking) {
-            this._startWebRTC(this.props.talking || false);
+        const talkingChanged = prevProps.talking !== this.props.talking;
+        const listeningChanged = prevProps.listening !== this.props.listening;
+        if (talkingChanged) {
+            this._startWebRTC(this.props.talking || false, this.props.listening || false);
+        } else if (listeningChanged && !this.props.talking) {
+            // Only restart for listening changes when not talking — robot audio
+            // already flows during talk mode regardless of listening state.
+            this._startWebRTC(false, this.props.listening || false);
         }
     }
 
@@ -30,16 +45,23 @@ class VideoStreamControl extends React.Component {
         this._closeWebRTC();
     }
 
-    _startWebRTC = async (talking = false) => {
+    _startWebRTC = async (talking = false, listening = false) => {
         this._closeWebRTC();
+        this.setState({ muted: false, cameraOff: false });
         this._pendingCandidates = [];
 
         if (talking) {
-            try {
-                this._localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-            } catch (err) {
-                console.error("getUserMedia failed:", err);
-                return;
+            if (!navigator.mediaDevices) {
+                console.warn("getUserMedia unavailable (requires HTTPS or localhost)");
+            } else {
+                try {
+                    this._localStream = await navigator.mediaDevices.getUserMedia({
+                        audio: true,
+                        video: { width: { max: 320 }, height: { max: 240 } },
+                    });
+                } catch (err) {
+                    console.error("getUserMedia failed:", err);
+                }
             }
         }
 
@@ -50,6 +72,7 @@ class VideoStreamControl extends React.Component {
             if (event.track.kind === "video") {
                 if (this._videoRef.current) {
                     this._videoRef.current.srcObject = event.streams[0];
+                    this._videoRef.current.play().catch(() => {});
                     const receiver = pc.getReceivers().find(r => r.track.kind === "video");
                     if (receiver && "jitterBufferTarget" in receiver) {
                         receiver.jitterBufferTarget = 0;
@@ -76,8 +99,10 @@ class VideoStreamControl extends React.Component {
 
         pc.addTransceiver("video", { direction: "recvonly" });
 
-        if (talking && this._localStream) {
+        if (talking || listening) {
             pc.addTransceiver("audio", { direction: "recvonly" });
+        }
+        if (talking && this._localStream) {
             const audioTrack = this._localStream.getAudioTracks()[0];
             const videoTrack = this._localStream.getVideoTracks()[0];
             if (audioTrack) pc.addTransceiver(audioTrack, { direction: "sendonly" });
@@ -95,6 +120,7 @@ class VideoStreamControl extends React.Component {
                 sdp: pc.localDescription.sdp,
                 type: "offer",
                 talking: talking,
+                listening: listening,
             });
         } catch (err) {
             console.error("WebRTC offer failed:", err);
@@ -109,6 +135,12 @@ class VideoStreamControl extends React.Component {
         if (this._pc) {
             this._pc.close();
             this._pc = null;
+        }
+        if (this._videoRef.current) {
+            this._videoRef.current.srcObject = null;
+        }
+        if (this._audioRef.current) {
+            this._audioRef.current.srcObject = null;
         }
         this._pendingCandidates = [];
         this._stopFpsCounter();
@@ -188,6 +220,21 @@ class VideoStreamControl extends React.Component {
             clearInterval(this._fpsInterval);
             this._fpsInterval = null;
         }
+        this._frameCount = 0;
+        this._lastFpsTs = 0;
+        this.props.updateFps(0);
+    };
+
+    toggleMuted = () => {
+        const track = this._localStream?.getAudioTracks()[0];
+        if (track) track.enabled = !track.enabled;
+        this.setState(prev => ({ muted: !prev.muted }));
+    };
+
+    toggleCamera = () => {
+        const track = this._localStream?.getVideoTracks()[0];
+        if (track) track.enabled = !track.enabled;
+        this.setState(prev => ({ cameraOff: !prev.cameraOff }));
     };
 
     render() {
@@ -202,22 +249,74 @@ class VideoStreamControl extends React.Component {
                 />
                 <audio ref={this._audioRef} autoPlay style={{ display: "none" }} />
                 {this.props.talking && (
-                    <video
-                        ref={this._pipRef}
-                        autoPlay
-                        playsInline
-                        muted
-                        style={{
+                    <div style={{
+                        position: "absolute",
+                        bottom: 8,
+                        right: 8,
+                        width: 120,
+                        height: 90,
+                        borderRadius: 4,
+                        border: "2px solid white",
+                        overflow: "hidden",
+                    }}>
+                        {this.state.cameraOff && (
+                            <div
+                                data-testid="camera-off-placeholder"
+                                style={{
+                                    position: "absolute",
+                                    inset: 0,
+                                    background: "#111",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                }}
+                            >
+                                <VideocamOffIcon style={{ color: "white", fontSize: 32 }} />
+                            </div>
+                        )}
+                        <video
+                            ref={this._pipRef}
+                            autoPlay
+                            playsInline
+                            muted
+                            style={{
+                                width: "100%",
+                                height: "100%",
+                                objectFit: "cover",
+                                display: this.state.cameraOff ? "none" : "block",
+                            }}
+                        />
+                        <div style={{
                             position: "absolute",
-                            bottom: 8,
-                            right: 8,
-                            width: 120,
-                            height: 90,
-                            objectFit: "cover",
-                            borderRadius: 4,
-                            border: "2px solid white",
-                        }}
-                    />
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            background: "rgba(0,0,0,0.45)",
+                            display: "flex",
+                            justifyContent: "center",
+                        }}>
+                            <IconButton
+                                size="small"
+                                onClick={this.toggleMuted}
+                                aria-label={this.state.muted ? "Unmute microphone" : "Mute microphone"}
+                                sx={{ color: "white", padding: "2px" }}
+                            >
+                                {this.state.muted
+                                    ? <MicOffIcon fontSize="small" />
+                                    : <MicIcon fontSize="small" />}
+                            </IconButton>
+                            <IconButton
+                                size="small"
+                                onClick={this.toggleCamera}
+                                aria-label={this.state.cameraOff ? "Turn on camera" : "Turn off camera"}
+                                sx={{ color: "white", padding: "2px" }}
+                            >
+                                {this.state.cameraOff
+                                    ? <VideocamOffIcon fontSize="small" />
+                                    : <VideocamIcon fontSize="small" />}
+                            </IconButton>
+                        </div>
+                    </div>
                 )}
             </div>
         );

@@ -283,6 +283,13 @@
       "export": true,
       "need_setup": true,
       "category": "capability"
+    },
+    "audio_output_device": {
+      "type": "int",
+      "default": -1,
+      "export": true,
+      "need_setup": false,
+      "category": "capability"
     }
   }
 }
